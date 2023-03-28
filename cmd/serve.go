@@ -38,7 +38,7 @@ func NewServeCommand(out output.Output) *cobra.Command {
 	cmd.Flags().StringVar(
 		&options.kubeconfigPath,
 		"output-kubeconfig", options.kubeconfigPath,
-		"where to write kubeconfig path. CWD if none provided",
+		"where to write kubeconfig path. Default: $(cwd)/support-bundle-kubeconfig if none provided",
 	)
 
 	cmd.Flags().StringVar(
