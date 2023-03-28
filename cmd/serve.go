@@ -98,7 +98,7 @@ func startK8sServer(
 ) (*envtest.Environment, error) {
 	bundleCRDs, err := bundle.LoadCRDs(supportBundle)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to load CRDs from bundle: %w", err)
 	}
 	if err := importer.PrepareSliceForImport(bundleCRDs); err != nil {
 		return nil, err
