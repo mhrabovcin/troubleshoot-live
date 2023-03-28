@@ -23,7 +23,8 @@ type serveOptions struct {
 
 func NewServeCommand(out output.Output) *cobra.Command {
 	options := &serveOptions{
-		proxyAddress: "localhost:8080",
+		kubeconfigPath: "./support-bundle-kubeconfig",
+		proxyAddress:   "localhost:8080",
 	}
 
 	cmd := &cobra.Command{
@@ -38,7 +39,7 @@ func NewServeCommand(out output.Output) *cobra.Command {
 	cmd.Flags().StringVar(
 		&options.kubeconfigPath,
 		"output-kubeconfig", options.kubeconfigPath,
-		"where to write kubeconfig path. Default: $(cwd)/support-bundle-kubeconfig if none provided",
+		"where to write kubeconfig path",
 	)
 
 	cmd.Flags().StringVar(
