@@ -1,0 +1,78 @@
+name: checks
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+    branches:
+      - main
+
+jobs:
+  unit-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: Install asdf
+        uses: asdf-vm/actions/setup@v2.1.0
+        with:
+          asdf_branch: v0.11.2
+
+      - name: Run unit tests
+        run: make test
+
+      - name: Annotate tests
+        if: always()
+        uses: guyarb/golang-test-annotations@v0.6.0
+        with:
+          test-results: test.json
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: Gather tool versions
+        uses: endorama/asdf-parse-tool-versions@v1
+        id: versions
+
+      - name: golangci-lint
+        uses: reviewdog/action-golangci-lint@v2
+        with:
+          fail_on_error: true
+          reporter: github-pr-review
+          go_version: v${{ fromJson(steps.versions.outputs.tools).golang }}
+          golangci_lint_version: v${{ fromJson(steps.versions.outputs.tools).golangci-lint }}
+
+  pre-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: Gather tool versions
+        uses: endorama/asdf-parse-tool-versions@v1
+        id: versions
+
+      - uses: actions/setup-go@v4
+        with:
+          go-version: ${{ fromJson(steps.versions.outputs.tools).golang }}
+          check-latest: false
+          cache: true
+
+      - uses: mfinelli/setup-shfmt@v2
+        with:
+          shfmt-version: ${{ fromJson(steps.versions.outputs.tools).shfmt }}
+
+      - uses: pre-commit/action@v3.0.0
+        with:
+          extra_args: --all-files --show-diff-on-failure
+        env:
+          SKIP: no-commit-to-branch,golangci-lint
