@@ -19,13 +19,13 @@ import (
 
 type Environment = envtest.Environment
 
-func Prepare(ctx context.Context, b bundle.Bundle) (*envtest.Environment, error) {
+func Prepare(ctx context.Context, b bundle.Bundle, opts ...Option) (*envtest.Environment, error) {
 	detectedK8sVersion, err := DetectK8sVersion(b)
-	if err == nil {
-		log.Printf("detected %q k8s version", detectedK8sVersion)
-	} else {
-		log.Fatalf("failed to detect k8s version: %s\n", err)
+	if err != nil {
+		return nil, fmt.Errorf("failed to detect k8s version: %s", err)
 	}
+	log.Printf("Detected %q k8s version", detectedK8sVersion)
+
 	versionSpec := versions.Spec{
 		Selector: detectedK8sVersion,
 	}
@@ -34,12 +34,17 @@ func Prepare(ctx context.Context, b bundle.Bundle) (*envtest.Environment, error)
 	if err != nil {
 		return nil, err
 	}
+
+	for _, o := range opts {
+		o(env)
+	}
+
 	binaryAssetsDirectory, err := setupEnvtest(ctx, env)
 	if err != nil {
 		return nil, err
 	}
 
-	log.Printf("using envtest binaries from directory: %s\n", binaryAssetsDirectory)
+	log.Printf("Using envtest binaries from directory: %s\n", binaryAssetsDirectory)
 	return &envtest.Environment{
 		BinaryAssetsDirectory: binaryAssetsDirectory,
 	}, nil

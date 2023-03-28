@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"runtime"
 
 	"github.com/mesosphere/dkp-cli-runtime/core/output"
 	"github.com/spf13/cobra"
@@ -19,12 +20,14 @@ import (
 type serveOptions struct {
 	kubeconfigPath string
 	proxyAddress   string
+	envtestArch    string
 }
 
 func NewServeCommand(out output.Output) *cobra.Command {
 	options := &serveOptions{
 		kubeconfigPath: "./support-bundle-kubeconfig",
 		proxyAddress:   "localhost:8080",
+		envtestArch:    runtime.GOARCH,
 	}
 
 	cmd := &cobra.Command{
@@ -47,6 +50,11 @@ func NewServeCommand(out output.Output) *cobra.Command {
 		"value of k8s proxy server",
 	)
 
+	cmd.Flags().StringVar(
+		&options.envtestArch, "envtest-arch", options.envtestArch,
+		"arch value for k8s server assets",
+	)
+
 	return cmd
 }
 
@@ -59,7 +67,7 @@ func runServe(bundlePath string, o *serveOptions, out output.Output) error {
 	ctx := context.Background()
 
 	out.StartOperation("Starting k8s server")
-	testEnv, err := startK8sServer(ctx, supportBundle, out)
+	testEnv, err := startK8sServer(ctx, supportBundle, out, o)
 	out.EndOperation(err == nil)
 	if err != nil {
 		return err
@@ -95,6 +103,7 @@ func startK8sServer(
 	ctx context.Context,
 	supportBundle bundle.Bundle,
 	out output.Output,
+	opts *serveOptions,
 ) (*envtest.Environment, error) {
 	bundleCRDs, err := bundle.LoadCRDs(supportBundle)
 	if err != nil {
@@ -105,9 +114,9 @@ func startK8sServer(
 	}
 	out.Infof("Detected %d CRDs", len(bundleCRDs))
 
-	testEnv, err := envtest.Prepare(ctx, supportBundle)
+	testEnv, err := envtest.Prepare(ctx, supportBundle, envtest.Arch(opts.envtestArch))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to prepare k8s environment: %w", err)
 	}
 	testEnv.CRDs = bundleCRDs
 	ipRange, err := bundle.DetectServiceSubnetRange(supportBundle)

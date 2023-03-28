@@ -2,6 +2,7 @@ package bundle
 
 import (
 	"encoding/json"
+	"fmt"
 	"path/filepath"
 
 	"github.com/spf13/afero"
@@ -26,7 +27,7 @@ func LoadCRDs(b Bundle) ([]*apiextensionsv1.CustomResourceDefinition, error) {
 	if err != nil {
 		crdList, err = loadCRDsFromList(data)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to load CRDs: %w", err)
 		}
 	}
 
@@ -39,9 +40,10 @@ func LoadCRDs(b Bundle) ([]*apiextensionsv1.CustomResourceDefinition, error) {
 
 func loadCRDsFromList(data []byte) (*apiextensionsv1.CustomResourceDefinitionList, error) {
 	crdList := &apiextensionsv1.CustomResourceDefinitionList{}
+
 	objs := []map[string]any{}
 	if err := json.Unmarshal(data, &objs); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to detect CRDs: %w", err)
 	}
 
 	for _, obj := range objs {

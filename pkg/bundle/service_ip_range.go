@@ -1,6 +1,7 @@
 package bundle
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 
@@ -12,9 +13,10 @@ import (
 // CAPI cluster resource
 // KIND kubeadm config
 func DetectServiceSubnetRange(b Bundle) (string, error) {
-	list, err := LoadResourcesFromFile(b, filepath.Join(b.Layout().ClusterResources(), "pods", "kube-system.json"))
+	path := filepath.Join(b.Layout().ClusterResources(), "pods", "kube-system.json")
+	list, err := LoadResourcesFromFile(b, path)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to load pods from file %q: %w", path, err)
 	}
 
 	for i := range list.Items {
