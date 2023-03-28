@@ -12,7 +12,7 @@ import (
 	"github.com/mhrabovcin/troubleshoot-live/pkg/bundle"
 )
 
-// TODO() inject logger
+// LogsHandler serves logs for k8s `logs` subresource from the provided bundle.
 func LogsHandler(b bundle.Bundle) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		vars := mux.Vars(r)
@@ -25,7 +25,10 @@ func LogsHandler(b bundle.Bundle) http.HandlerFunc {
 			return
 		}
 
+		// TODO(mh): inject logger
 		log.Printf("LogsHandler: %s served from %q\n", r.URL, podLogsPath)
-		w.Write(data)
+		if _, err := w.Write(data); err != nil {
+			log.Printf("LogsHandler: failed to write response data: %s", err)
+		}
 	}
 }

@@ -8,17 +8,22 @@ import (
 	"runtime"
 
 	"github.com/go-logr/logr"
-	"github.com/mhrabovcin/troubleshoot-live/pkg/bundle"
 	"github.com/spf13/afero"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/tools/setup-envtest/env"
 	"sigs.k8s.io/controller-runtime/tools/setup-envtest/remote"
 	"sigs.k8s.io/controller-runtime/tools/setup-envtest/store"
 	"sigs.k8s.io/controller-runtime/tools/setup-envtest/versions"
+
+	"github.com/mhrabovcin/troubleshoot-live/pkg/bundle"
 )
 
+// Environment is alias for envtest.Environment.
 type Environment = envtest.Environment
 
+// Prepare creates k8s environment for the provided bundle by detecting the
+// k8s version and downloading necessary envtest assets for launching the
+// detected k8s version.
 func Prepare(ctx context.Context, b bundle.Bundle, opts ...Option) (*envtest.Environment, error) {
 	detectedK8sVersion, err := DetectK8sVersion(b)
 	if err != nil {
@@ -30,16 +35,16 @@ func Prepare(ctx context.Context, b bundle.Bundle, opts ...Option) (*envtest.Env
 		Selector: detectedK8sVersion,
 	}
 
-	env, err := createEnvtest(ctx, versionSpec)
+	envConfig, err := createEnvtest(ctx, versionSpec)
 	if err != nil {
 		return nil, err
 	}
 
 	for _, o := range opts {
-		o(env)
+		o(envConfig)
 	}
 
-	binaryAssetsDirectory, err := setupEnvtest(ctx, env)
+	binaryAssetsDirectory, err := setupEnvtest(ctx, envConfig)
 	if err != nil {
 		return nil, err
 	}

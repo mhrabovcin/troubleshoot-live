@@ -6,9 +6,10 @@ import (
 	"strconv"
 
 	"github.com/Masterminds/semver/v3"
-	"github.com/mhrabovcin/troubleshoot-live/pkg/bundle"
 	"github.com/spf13/afero"
 	versions "sigs.k8s.io/controller-runtime/tools/setup-envtest/versions"
+
+	"github.com/mhrabovcin/troubleshoot-live/pkg/bundle"
 )
 
 //	{
@@ -49,6 +50,8 @@ func selectorFromSemver(sv *semver.Version) versions.Selector {
 	}
 }
 
+// DetectK8sVersion attempts to load k8s server version from which was bundle
+// collected.
 func DetectK8sVersion(b bundle.Bundle) (versions.Selector, error) {
 	data, err := afero.ReadFile(b, filepath.Join(b.Layout().ClusterInfo(), "cluster_version.json"))
 	if err != nil {

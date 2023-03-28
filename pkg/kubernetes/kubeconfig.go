@@ -10,17 +10,19 @@ import (
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
-func WriteProxyKubeconfig(host string, path string) (string, error) {
+// WriteProxyKubeconfig creates a KUBECONFIG file for http proxy server. If path
+// for kubeconfig is not provided then default value is create in `CWD`.
+func WriteProxyKubeconfig(host, path string) (string, error) {
 	if path == "" {
-		kubeconfigPath, _, err := GetKubeconfigPathInCWD()
+		kubeconfigPath, _, err := getKubeconfigPathInCWD()
 		if err != nil {
 			return "", err
 		}
 		path = kubeconfigPath
 	}
 
-	if err := RestConfigToKubeconfig(&rest.Config{
-		Host: "http://localhost:8080",
+	if err := restConfigToKubeconfig(&rest.Config{
+		Host: host,
 	}, path); err != nil {
 		return "", err
 	}
@@ -28,7 +30,7 @@ func WriteProxyKubeconfig(host string, path string) (string, error) {
 	return path, nil
 }
 
-func RestConfigToKubeconfig(rc *rest.Config, path string) error {
+func restConfigToKubeconfig(rc *rest.Config, path string) error {
 	clusters := map[string]*clientcmdapi.Cluster{}
 	clusters["default-cluster"] = &clientcmdapi.Cluster{
 		Server:                   rc.Host,
@@ -59,7 +61,7 @@ func RestConfigToKubeconfig(rc *rest.Config, path string) error {
 	return clientcmd.WriteToFile(clientConfig, path)
 }
 
-func GetKubeconfigPathInCWD() (string, func(), error) {
+func getKubeconfigPathInCWD() (string, func(), error) {
 	wd, err := os.Getwd()
 	if err != nil {
 		return "", nil, err

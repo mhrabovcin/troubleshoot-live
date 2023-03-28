@@ -10,8 +10,12 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-// CAPI cluster resource
-// KIND kubeadm config
+// DetectServiceSubnetRange attempts to determine service ip range value provided
+// to k8s api server, so that local version can be launched with same argument.
+// So far the function tries to parse value from `kube-apiserver` pod.
+// Other potential locations for parsing this value:
+// - CAPI cluster resource
+// - KIND kubeadm config.
 func DetectServiceSubnetRange(b Bundle) (string, error) {
 	path := filepath.Join(b.Layout().ClusterResources(), "pods", "kube-system.json")
 	list, err := LoadResourcesFromFile(b, path)
@@ -24,13 +28,13 @@ func DetectServiceSubnetRange(b Bundle) (string, error) {
 			continue
 		}
 
-		return parseIpRangeArg(&list.Items[i])
+		return parseIPRangeArg(&list.Items[i])
 	}
 
 	return "", nil
 }
 
-func parseIpRangeArg(u *unstructured.Unstructured) (string, error) {
+func parseIPRangeArg(u *unstructured.Unstructured) (string, error) {
 	pod := &corev1.Pod{}
 	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(u.UnstructuredContent(), &pod); err != nil {
 		return "", err

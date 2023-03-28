@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"runtime"
 
@@ -23,6 +22,7 @@ type serveOptions struct {
 	envtestArch    string
 }
 
+// NewServeCommand serves the provided bundle.
 func NewServeCommand(out output.Output) *cobra.Command {
 	options := &serveOptions{
 		kubeconfigPath: "./support-bundle-kubeconfig",
@@ -89,14 +89,14 @@ func runServe(bundlePath string, o *serveOptions, out output.Output) error {
 	proxyHTTPAddress := fmt.Sprintf("http://%s", o.proxyAddress)
 	kubeconfigPath, err := kubernetes.WriteProxyKubeconfig(proxyHTTPAddress, o.kubeconfigPath)
 	if err != nil {
-		log.Fatalln(err)
+		return fmt.Errorf("failed to create kubeconfig: %w", err)
 	}
 
 	out.Infof("Running HTTPs proxy service on: %s", proxyHTTPAddress)
 	out.Infof("Kubeconfig path: %s", kubeconfigPath)
 
 	http.Handle("/", proxy.New(testEnv.Config, supportBundle))
-	return http.ListenAndServe(o.proxyAddress, nil)
+	return http.ListenAndServe(o.proxyAddress, nil) //nolint:gosec // not a production server
 }
 
 func startK8sServer(

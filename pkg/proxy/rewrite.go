@@ -10,14 +10,15 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/mhrabovcin/troubleshoot-live/pkg/importer"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+
+	"github.com/mhrabovcin/troubleshoot-live/pkg/importer"
 )
 
-func RewriteResponseResourceFields(r *http.Response) (returnErr error) {
+func rewriteResponseResourceFields(r *http.Response) (returnErr error) {
 	if r.StatusCode != http.StatusOK {
 		return nil
 	}
@@ -96,10 +97,10 @@ func writeResponseBody(r *http.Response, data []byte) error {
 		_, err := io.Copy(gzipWriter, bytes.NewReader(data))
 		if err != nil {
 			return err
-		} else {
-			gzipWriter.Close()
-			data = gzipped.Bytes()
 		}
+
+		gzipWriter.Close()
+		data = gzipped.Bytes()
 	}
 
 	r.Body = io.NopCloser(bytes.NewReader(data))

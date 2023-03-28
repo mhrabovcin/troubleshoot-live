@@ -12,8 +12,10 @@ import (
 	"github.com/spf13/afero"
 )
 
-var ErrUnknownBundle = fmt.Errorf("unknown bundle format")
+// ErrUnknownBundleFormat is returned when bundle cannot be loaded.
+var ErrUnknownBundleFormat = fmt.Errorf("unknown bundle format")
 
+// Bundle is representing support bundle data.
 type Bundle interface {
 	afero.Fs
 
@@ -83,7 +85,7 @@ func New(path string) (Bundle, error) {
 	}
 
 	if fs == nil {
-		return nil, ErrUnknownBundle
+		return nil, ErrUnknownBundleFormat
 	}
 
 	return bundle{fs}, nil

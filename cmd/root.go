@@ -12,6 +12,7 @@ import (
 	"github.com/mesosphere/dkp-cli-runtime/core/output"
 )
 
+// NewCommand creates root command.
 func NewCommand(in io.Reader, out, errOut io.Writer) (*cobra.Command, output.Output) {
 	rootCmd, rootOpts := root.NewCommand(out, errOut)
 
@@ -20,6 +21,7 @@ func NewCommand(in io.Reader, out, errOut io.Writer) (*cobra.Command, output.Out
 	return rootCmd, rootOpts.Output
 }
 
+// Execute runs the default CLI configuration.
 func Execute() {
 	rootCmd, out := NewCommand(os.Stdin, os.Stdout, os.Stderr)
 	rootCmd.SilenceErrors = true

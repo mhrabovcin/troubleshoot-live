@@ -1,0 +1,105 @@
+run:
+  timeout: 3m
+
+linters-settings:
+  depguard:
+    list-type: blacklist
+    packages:
+      - k8s.io/kubernetes
+    packages-with-error-message:
+      - k8s.io/kubernetes: "Avoid k8s.io/kubernetes if possible to reduce transitive dependencies"
+  dupl:
+    threshold: 100
+  funlen:
+    lines: 100
+    statements: 50
+  gci:
+    local-prefixes: github.com/mesosphere/troubleshoot-live
+  goconst:
+    min-len: 2
+    min-occurrences: 3
+  gocritic:
+    disabled-checks:
+      - unnamedResult
+      - rangeValCopy
+    enabled-tags:
+      - diagnostic
+      - experimental
+      - opinionated
+      - performance
+      - style
+  gocyclo:
+    min-complexity: 15
+  goimports:
+    local-prefixes: github.com/mhrabovcin/troubleshoot-live
+  govet:
+    check-shadowing: true
+    enable-all: true
+    disable:
+      # While struct sizes could be smaller if fields aligned properly, that also leads
+      # to possibly non-intuitive layout of struct fields (harder to read). Disable
+      # `fieldalignment` check here until we evaluate if it is worthwhile.
+      - fieldalignment
+  lll:
+    line-length: 140
+  misspell:
+    locale: US
+  nolintlint:
+    allow-leading-space: false
+    allow-unused: false
+    require-explanation: true
+    require-specific: true
+
+linters:
+  # please, do not use `enable-all`: it's deprecated and will be removed soon.
+  # inverted configuration with `enable-all` and `disable` is not scalable during updates of golangci-lint
+  disable-all: true
+  enable:
+    - asciicheck
+    - bodyclose
+    - depguard
+    - dogsled
+    - dupl
+    - errcheck
+    - exhaustive
+    - exportloopref
+    - funlen
+    - gochecknoglobals
+    - gochecknoinits
+    - goconst
+    - gocritic
+    - godot
+    - gofmt
+    - gofumpt
+    - goimports
+    - goprintffuncname
+    - gosec
+    - gosimple
+    - govet
+    - ineffassign
+    - lll
+    - makezero
+    - misspell
+    - nakedret
+    - nestif
+    - noctx
+    - nolintlint
+    - prealloc
+    - predeclared
+    - revive
+    - staticcheck
+    - stylecheck
+    - thelper
+    - tparallel
+    - typecheck
+    - unconvert
+    - unparam
+    - unused
+    - whitespace
+
+issues:
+  exclude:
+    - 'declaration of "(err|ctx)" shadows declaration at'
+  include:
+    - EXC0012
+    - EXC0014
