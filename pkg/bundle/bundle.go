@@ -56,16 +56,37 @@ func New(path string) (Bundle, error) {
 		// 	filepath.Base(strings.TrimSuffix(path, ".tar.gz")),
 		// )
 
-		tmpDir, err := os.MkdirTemp("", "support-bundle-live")
+		baseDir := filepath.Join(os.TempDir(), "troubleshoot-live")
+		fi, err := os.Stat(path)
+		if err != nil {
+			return nil, err
+		}
+		tmpDir := filepath.Join(baseDir, fmt.Sprintf("%s_%d", filepath.Base(path), fi.Size()))
+		ok, err := afero.DirExists(afero.NewOsFs(), tmpDir)
+		if err != nil {
+			return nil, err
+		}
+		// Directory for extracting bundle doesn't exist yet
+		if !ok {
+			if err := os.MkdirAll(tmpDir, 0o755); err != nil {
+				return nil, fmt.Errorf("failed to create dir %q for extracting bundle", baseDir)
+			}
+		}
+
+		existingDirItems, err := os.ReadDir(tmpDir)
 		if err != nil {
 			return nil, err
 		}
 
-		log.Printf("extracting support bundle from %q to %q", path, tmpDir)
-		cmd := exec.CommandContext(
-			context.Background(), "tar", "xvzf", path, "-C", tmpDir)
-		if err := cmd.Run(); err != nil {
-			return nil, err
+		if len(existingDirItems) == 0 {
+			log.Printf("Extracting support bundle from %q to %q ...", path, tmpDir)
+			cmd := exec.CommandContext(
+				context.Background(), "tar", "xvzf", path, "-C", tmpDir)
+			if err := cmd.Run(); err != nil {
+				return nil, err
+			}
+		} else {
+			log.Printf("Using already extracted support bundle in %q ...", tmpDir)
 		}
 
 		// TODO: detect extracted path, assume dir same as archive name
