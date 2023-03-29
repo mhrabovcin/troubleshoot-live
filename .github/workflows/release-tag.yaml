@@ -20,9 +20,7 @@ jobs:
           fetch-depth: 0
 
       - name: Install tools via asdf
-        uses: asdf-vm/actions/setup@v2.1.0
-        with:
-          asdf_branch: v0.11.2
+        uses: asdf-vm/actions/install@v2.1.0
 
       - name: Release
         run: make release
