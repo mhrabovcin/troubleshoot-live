@@ -65,6 +65,7 @@ func setupEnvtest(ctx context.Context, e *env.Env) (_ string, err error) {
 	ctx = logr.NewContext(ctx, e.Log)
 
 	e.CheckCoherence()
+	e.EnsureBaseDirs(ctx)
 	e.EnsureVersionIsSet(ctx)
 	if !e.ExistsAndValid() {
 		e.Fetch(ctx)
