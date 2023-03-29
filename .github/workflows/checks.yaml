@@ -77,9 +77,9 @@ jobs:
           check-latest: false
           cache: true
 
-      - uses: mfinelli/setup-shfmt@v2
-        with:
-          shfmt-version: ${{ fromJson(steps.versions.outputs.tools).shfmt }}
+      # - uses: mfinelli/setup-shfmt@v2
+      #   with:
+      #     shfmt-version: ${{ fromJson(steps.versions.outputs.tools).shfmt }}
 
       - uses: pre-commit/action@v3.0.0
         with:
