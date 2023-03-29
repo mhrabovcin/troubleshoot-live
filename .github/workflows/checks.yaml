@@ -24,6 +24,16 @@ jobs:
         with:
           asdf_branch: v0.11.2
 
+      - name: Gather tool versions
+        uses: endorama/asdf-parse-tool-versions@v1
+        id: versions
+
+      - uses: actions/setup-go@v4
+        with:
+          go-version: ${{ fromJson(steps.versions.outputs.tools).golang }}
+          check-latest: false
+          cache: true
+
       - name: Run unit tests
         run: make test
 
