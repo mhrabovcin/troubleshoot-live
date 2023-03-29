@@ -17,4 +17,3 @@ The proxy server allows to define on which address is the API server available. 
 
 * The `creationTimestamp` is not preserverd when imported from the bundle files. The proxy handler mutates API server responses and replaces `creationTimestamp` with data from the bundle.
 * A custom handler for serving logs data from the support bundle. This allows to use `kubectl` and other tools to retrieve logs for pods.
-
