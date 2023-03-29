@@ -216,7 +216,7 @@ func importSecrets(
 		Resource: "secrets",
 	}
 	return importCMOrSecret(
-		ctx, b, discoveryClient, dynamicClient, bundle.LoadConfigMap, gvr)
+		ctx, b, discoveryClient, dynamicClient, bundle.LoadSecret, gvr)
 }
 
 func importObject(
