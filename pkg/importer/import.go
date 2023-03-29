@@ -28,6 +28,8 @@ func AnnotationForOriginalValue(name string) string {
 	return fmt.Sprintf("support-bundle-live/%s", name)
 }
 
+type importerFn func(context.Context, bundle.Bundle, discovery.DiscoveryInterface, *dynamic.DynamicClient) error
+
 // ImportBundle creates resources in provided API server.
 func ImportBundle(ctx context.Context, b bundle.Bundle, cfg *rest.Config) error {
 	dynamicClient, err := dynamic.NewForConfig(cfg)
@@ -40,19 +42,20 @@ func ImportBundle(ctx context.Context, b bundle.Bundle, cfg *rest.Config) error 
 		return err
 	}
 
-	if err := importNamespaces(ctx, b, discoveryClient, dynamicClient); err != nil {
-		return err
+	importers := []importerFn{
+		importNamespaces,
+		importClusterResources,
+		importCMs,
+		importSecrets,
 	}
 
-	if err := importClusterResources(ctx, b, discoveryClient, dynamicClient); err != nil {
-		return err
+	for _, importerFn := range importers {
+		if err := importerFn(ctx, b, discoveryClient, dynamicClient); err != nil {
+			return err
+		}
 	}
 
-	if err := importCMs(ctx, b, discoveryClient, dynamicClient); err != nil {
-		return err
-	}
-
-	return importSecrets(ctx, b, discoveryClient, dynamicClient)
+	return nil
 }
 
 func importNamespaces(
