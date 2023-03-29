@@ -1,0 +1,58 @@
+project_name: troubleshoot-live
+
+changelog:
+  use: github
+  groups:
+    - title: Features
+      regexp: "^.*feat[(\\w)]*:+.*$"
+      order: 0
+    - title: 'Bug fixes'
+      regexp: "^.*fix[(\\w)]*:+.*$"
+      order: 1
+  filters:
+    exclude:
+      - '^docs:'
+      - '^chore:'
+      - '^build:'
+
+release:
+  footer: |
+    ### Summary
+    **Full Changelog**: https://github.com/mhrabovcin/troubleshoot-live/compare/{{ .PreviousTag }}...{{ .Tag }}
+
+builds:
+  - id: cli
+    dir: .
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s
+      - -w
+      - -X 'github.com/mesosphere/dkp-cli-runtime/core/cmd/version.commitDate={{ .CommitDate }}'
+      - -X 'github.com/mesosphere/dkp-cli-runtime/core/cmd/version.gitCommit={{ .FullCommit }}'
+      - -X 'github.com/mesosphere/dkp-cli-runtime/core/cmd/version.gitTreeState={{ .Env.GIT_TREE_STATE }}'
+      - -X 'github.com/mesosphere/dkp-cli-runtime/core/cmd/version.gitVersion=v{{ trimprefix .Version "v" }}'
+      - -X 'github.com/mesosphere/dkp-cli-runtime/core/cmd/version.major={{ .Major }}'
+      - -X 'github.com/mesosphere/dkp-cli-runtime/core/cmd/version.minor={{ .Minor }}'
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    mod_timestamp: '{{ .CommitTimestamp }}'
+archives:
+  - name_template: '{{ .ProjectName }}_v{{trimprefix .Version "v"}}_{{ .Os }}_{{ .Arch }}'
+    format_overrides:
+      - goos: windows
+        format: zip
+    builds:
+      - cli
+    rlcp: true
+checksum:
+  name_template: 'checksums.txt'
+snapshot:
+  name_template: "{{ incminor .Tag }}-dev"
