@@ -1,0 +1,93 @@
+repos:
+- repo: local
+  hooks:
+  - id: golangci-lint
+    name: golangci-lint
+    entry: make lint
+    language: system
+    files: "(.*\\.go|go.mod|go.sum)$"
+    pass_filenames: false
+- repo: https://github.com/tekwizely/pre-commit-golang
+  rev: v1.0.0-rc.1
+  hooks:
+  - id: go-mod-tidy-repo
+- repo: https://github.com/pre-commit/pre-commit-hooks
+  rev: v4.4.0
+  hooks:
+  - id: trailing-whitespace
+    stages: [commit]
+  - id: check-yaml
+    args: ["-m", "--unsafe"]
+    stages: [commit]
+  - id: mixed-line-ending
+    args: ["-f", "lf"]
+    exclude: \.bat$
+    stages: [commit]
+  - id: no-commit-to-branch
+    stages: [commit]
+  - id: check-added-large-files
+    stages: [commit]
+  - id: check-case-conflict
+    stages: [commit]
+  - id: check-merge-conflict
+    stages: [commit]
+  - id: check-executables-have-shebangs
+    stages: [commit]
+  - id: check-symlinks
+    stages: [commit]
+  - id: end-of-file-fixer
+    stages: [commit]
+- repo: https://github.com/jorisroovers/gitlint
+  rev: v0.19.1
+  hooks:
+  - id: gitlint
+    stages: [commit-msg]
+- repo: https://github.com/jumanjihouse/pre-commit-hooks
+  rev: 3.0.0
+  hooks:
+  - id: shfmt
+    stages: [commit]
+    args: ["-s", "-i", "2"]
+  - id: script-must-have-extension
+    stages: [commit]
+- repo: https://github.com/shellcheck-py/shellcheck-py
+  rev: v0.9.0.2
+  hooks:
+  - id: shellcheck
+    stages: [commit]
+    args: ["-e", "SC2211"]
+- repo: https://github.com/igorshubovych/markdownlint-cli
+  rev: v0.33.0
+  hooks:
+  - id: markdownlint
+    stages: [commit]
+    exclude: ^CHANGELOG.md$
+- repo: https://github.com/Lucas-C/pre-commit-hooks
+  rev: v1.4.2
+  hooks:
+  - id: insert-license
+    name: License headers - Go
+    stages: [commit]
+    files: "(.*\\.go|go.mod)$"
+    args:
+      - --license-filepath
+      - header.txt
+      - --comment-style
+      - //
+  - id: insert-license
+    name: License headers - YAML and Makefiles
+    stages: [commit]
+    files: (^Makefile|\.(ya?ml|mk))$
+    args:
+      - --license-filepath
+      - header.txt
+  - id: insert-license
+    name: License headers - Markdown
+    stages: [commit]
+    files: \.md$
+    exclude: ^CHANGELOG.md$
+    args:
+      - --license-filepath
+      - header.txt
+      - --comment-style
+      - <!--|| -->
