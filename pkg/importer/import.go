@@ -40,50 +40,74 @@ func ImportBundle(ctx context.Context, b bundle.Bundle, cfg *rest.Config) error 
 		return err
 	}
 
-	{
-		list, err := bundle.LoadResourcesFromFile(b, filepath.Join(b.Layout().ClusterResources(), "namespaces.json"))
-		if err != nil {
-			return err
-		}
+	if err := importNamespaces(ctx, b, discoveryClient, dynamicClient); err != nil {
+		return err
+	}
 
-		namespaces := []string{}
-		gvr, includeStatus, err := detectGVR(discoveryClient, &list.Items[0])
-		if err != nil {
-			return err
-		}
-		err = list.EachListItem(func(o runtime.Object) error {
-			u, _ := meta.Accessor(o)
-			namespaces = append(namespaces, u.GetName())
-			return importObject(ctx, dynamicClient, gvr, o, includeStatus)
-		})
-		if err != nil {
-			return err
-		}
+	if err := importClusterResources(ctx, b, discoveryClient, dynamicClient); err != nil {
+		return err
+	}
+
+	return importCMs(ctx, b, discoveryClient, dynamicClient)
+}
+
+func importNamespaces(
+	ctx context.Context,
+	b bundle.Bundle,
+	discoveryClient discovery.DiscoveryInterface,
+	dynamicClient *dynamic.DynamicClient,
+) error {
+	list, err := bundle.LoadResourcesFromFile(b, filepath.Join(b.Layout().ClusterResources(), "namespaces.json"))
+	if err != nil {
+		return err
+	}
+
+	namespaces := []string{}
+	gvr, includeStatus, err := detectGVR(discoveryClient, &list.Items[0])
+	if err != nil {
+		return err
+	}
+	return list.EachListItem(func(o runtime.Object) error {
+		u, _ := meta.Accessor(o)
+		namespaces = append(namespaces, u.GetName())
+		return importObject(ctx, dynamicClient, gvr, o, includeStatus)
+	})
+}
+
+func importClusterResources(
+	ctx context.Context,
+	b bundle.Bundle,
+	discoveryClient discovery.DiscoveryInterface,
+	dynamicClient *dynamic.DynamicClient,
+) error {
+	skipResources := []string{
+		// crds are imported during the envtest startup
+		"custom-resource-definitions.json",
+		"pod-disruption-budgets-info.json",
+		// api-resources from the discovery client
+		"resources.json",
+		// api-groups from the discovery client
+		"groups.json",
+	}
+
+	skipDirs := []string{
+		"auth-cani-list",
+		"pod-disruption-budgets",
 	}
 
 	return afero.Walk(b, b.Layout().ClusterResources(), func(path string, info fs.FileInfo, err error) error {
 		if err != nil {
-			log.Println(err)
+			log.Printf(" x error reading file %q: %s\n", path, err)
 			return nil
 		}
 
-		// Do not process auth-cani-list resources
-		if info.IsDir() && strings.Contains(path, "auth-cani-list") || strings.Contains(path, "pod-disruption-budgets") {
+		// Do not process any resources from the directory
+		if info.IsDir() && slices.Contains(skipDirs, filepath.Base(info.Name())) {
 			return fs.SkipDir
 		}
 
 		if info.IsDir() {
 			return nil
-		}
-
-		skipResources := []string{
-			// crds are imported during the envtest startup
-			"custom-resource-definitions.json",
-			"pod-disruption-budgets-info.json",
-			// api-resources from the discovery client
-			"resources.json",
-			// api-groups from the discovery client
-			"groups.json",
 		}
 
 		if slices.Contains(skipResources, filepath.Base(info.Name())) {
@@ -97,11 +121,7 @@ func ImportBundle(ctx context.Context, b bundle.Bundle, cfg *rest.Config) error 
 
 		list, err := bundle.LoadResourcesFromFile(b, path)
 		if err != nil {
-			errorStr := err.Error()
-			if len(errorStr) > 200 {
-				errorStr = errorStr[:200]
-			}
-			log.Printf(" x Failed to import %q with error: %s\n", path, errorStr)
+			log.Printf(" x Failed to import %q with error: %s\n", path, maxErrorString(err, 200))
 			return nil
 		}
 
@@ -113,7 +133,7 @@ func ImportBundle(ctx context.Context, b bundle.Bundle, cfg *rest.Config) error 
 
 		gvr, includeStatus, err := detectGVR(discoveryClient, &list.Items[0])
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to detect GVR from file %q: %w", path, err)
 		}
 
 		_ = list.EachListItem(func(o runtime.Object) error {
@@ -126,6 +146,42 @@ func ImportBundle(ctx context.Context, b bundle.Bundle, cfg *rest.Config) error 
 			}
 			return nil
 		})
+
+		return nil
+	})
+}
+
+func importCMs(
+	ctx context.Context,
+	b bundle.Bundle,
+	_ discovery.DiscoveryInterface,
+	dynamicClient *dynamic.DynamicClient,
+) error {
+	return afero.Walk(b, b.Layout().ConfigMaps(), func(path string, info fs.FileInfo, err error) error {
+		if err != nil {
+			log.Printf(" x error reading file %q: %s\n", path, err)
+			return nil
+		}
+
+		if info.IsDir() {
+			return nil
+		}
+
+		log.Printf("Importing CM from: %s ... \n", path)
+
+		obj, err := bundle.LoadConfigMap(b, path)
+		if err != nil {
+			log.Printf(" x Failed to import %q with error: %s\n", path, maxErrorString(err, 200))
+			return nil
+		}
+
+		gvr := schema.GroupVersionResource{
+			Version:  "v1",
+			Resource: "configmaps",
+		}
+		if err := importObject(ctx, dynamicClient, gvr, obj, true); err != nil {
+			return err
+		}
 
 		return nil
 	})
@@ -191,4 +247,12 @@ func createResource(ctx context.Context, u *unstructured.Unstructured, includeSt
 	}
 
 	return nil
+}
+
+func maxErrorString(err error, maxSize int) string {
+	errorStr := err.Error()
+	if len(errorStr) > 200 {
+		errorStr = errorStr[:200]
+	}
+	return errorStr
 }
