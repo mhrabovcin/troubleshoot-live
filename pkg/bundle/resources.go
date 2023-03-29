@@ -40,6 +40,15 @@ func LoadResourcesFromFile(bundle afero.Fs, path string) (*unstructured.Unstruct
 	return nil, fmt.Errorf("unsupported data format")
 }
 
+// cmOrSecret represents a special data structure that troubleshoot uses for
+// storing secrets and configmaps.
+type cmOrSecret struct {
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
+	// configmaps include data but secrets data are not included in the bundle.
+	Data map[string]string `json:"data,omitempty"`
+}
+
 // LoadConfigMap loads configmap data from special struct that support-bundle
 // uses to store CMs in.
 func LoadConfigMap(bundle afero.Fs, path string) (*unstructured.Unstructured, error) {
@@ -48,11 +57,7 @@ func LoadConfigMap(bundle afero.Fs, path string) (*unstructured.Unstructured, er
 		return nil, err
 	}
 
-	cmStruct := struct {
-		Name      string            `json:"name"`
-		Namespace string            `json:"namespace"`
-		Data      map[string]string `json:"data"`
-	}{}
+	cmStruct := cmOrSecret{}
 	if err := json.Unmarshal(data, &cmStruct); err != nil {
 		return nil, err
 	}
@@ -63,6 +68,33 @@ func LoadConfigMap(bundle afero.Fs, path string) (*unstructured.Unstructured, er
 			Namespace: cmStruct.Namespace,
 		},
 		Data: cmStruct.Data,
+	}
+	u, err := runtime.DefaultUnstructuredConverter.ToUnstructured(cm)
+	if err != nil {
+		return nil, err
+	}
+
+	return &unstructured.Unstructured{Object: u}, nil
+}
+
+// LoadSecret loads secret from special struct that support-bundle
+// uses to store Secrets in. It leaves the data empty.
+func LoadSecret(bundle afero.Fs, path string) (*unstructured.Unstructured, error) {
+	data, err := afero.ReadFile(bundle, path)
+	if err != nil {
+		return nil, err
+	}
+
+	secretData := cmOrSecret{}
+	if err := json.Unmarshal(data, &secretData); err != nil {
+		return nil, err
+	}
+
+	cm := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      secretData.Name,
+			Namespace: secretData.Namespace,
+		},
 	}
 	u, err := runtime.DefaultUnstructuredConverter.ToUnstructured(cm)
 	if err != nil {

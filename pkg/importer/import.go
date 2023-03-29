@@ -48,7 +48,11 @@ func ImportBundle(ctx context.Context, b bundle.Bundle, cfg *rest.Config) error 
 		return err
 	}
 
-	return importCMs(ctx, b, discoveryClient, dynamicClient)
+	if err := importCMs(ctx, b, discoveryClient, dynamicClient); err != nil {
+		return err
+	}
+
+	return importSecrets(ctx, b, discoveryClient, dynamicClient)
 }
 
 func importNamespaces(
@@ -151,11 +155,15 @@ func importClusterResources(
 	})
 }
 
-func importCMs(
+type cmOrSecretLoadFn func(afero.Fs, string) (*unstructured.Unstructured, error)
+
+func importCMOrSecret(
 	ctx context.Context,
 	b bundle.Bundle,
 	_ discovery.DiscoveryInterface,
 	dynamicClient *dynamic.DynamicClient,
+	loadFn cmOrSecretLoadFn,
+	gvr schema.GroupVersionResource,
 ) error {
 	return afero.Walk(b, b.Layout().ConfigMaps(), func(path string, info fs.FileInfo, err error) error {
 		if err != nil {
@@ -167,24 +175,48 @@ func importCMs(
 			return nil
 		}
 
-		log.Printf("Importing CM from: %s ... \n", path)
+		log.Printf("Importing %s from: %s ... \n", gvr.Resource, path)
 
-		obj, err := bundle.LoadConfigMap(b, path)
+		obj, err := loadFn(b, path)
 		if err != nil {
 			log.Printf(" x Failed to import %q with error: %s\n", path, maxErrorString(err, 200))
 			return nil
 		}
 
-		gvr := schema.GroupVersionResource{
-			Version:  "v1",
-			Resource: "configmaps",
-		}
 		if err := importObject(ctx, dynamicClient, gvr, obj, true); err != nil {
 			return err
 		}
 
 		return nil
 	})
+}
+
+func importCMs(
+	ctx context.Context,
+	b bundle.Bundle,
+	discoveryClient discovery.DiscoveryInterface,
+	dynamicClient *dynamic.DynamicClient,
+) error {
+	gvr := schema.GroupVersionResource{
+		Version:  "v1",
+		Resource: "configmaps",
+	}
+	return importCMOrSecret(
+		ctx, b, discoveryClient, dynamicClient, bundle.LoadConfigMap, gvr)
+}
+
+func importSecrets(
+	ctx context.Context,
+	b bundle.Bundle,
+	discoveryClient discovery.DiscoveryInterface,
+	dynamicClient *dynamic.DynamicClient,
+) error {
+	gvr := schema.GroupVersionResource{
+		Version:  "v1",
+		Resource: "secrets",
+	}
+	return importCMOrSecret(
+		ctx, b, discoveryClient, dynamicClient, bundle.LoadConfigMap, gvr)
 }
 
 func importObject(
@@ -251,8 +283,8 @@ func createResource(ctx context.Context, u *unstructured.Unstructured, includeSt
 
 func maxErrorString(err error, maxSize int) string {
 	errorStr := err.Error()
-	if len(errorStr) > 200 {
-		errorStr = errorStr[:200]
+	if len(errorStr) > maxSize {
+		errorStr = errorStr[:maxSize]
 	}
 	return errorStr
 }
