@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
@@ -24,22 +23,23 @@ func DetectServiceSubnetRange(b Bundle) (string, error) {
 	}
 
 	for i := range list.Items {
-		if !isKubeApiserverPod(&list.Items[i]) {
+		pod := &corev1.Pod{}
+		if err := runtime.DefaultUnstructuredConverter.
+			FromUnstructured(list.Items[i].UnstructuredContent(), &pod); err != nil {
+			return "", err
+		}
+
+		if !isKubeApiserverPod(pod) {
 			continue
 		}
 
-		return parseIPRangeArg(&list.Items[i])
+		return parseIPRangeArg(pod)
 	}
 
 	return "", nil
 }
 
-func parseIPRangeArg(u *unstructured.Unstructured) (string, error) {
-	pod := &corev1.Pod{}
-	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(u.UnstructuredContent(), &pod); err != nil {
-		return "", err
-	}
-
+func parseIPRangeArg(pod *corev1.Pod) (string, error) {
 	for _, c := range pod.Spec.Containers {
 		if c.Name != "kube-apiserver" {
 			continue
@@ -55,11 +55,11 @@ func parseIPRangeArg(u *unstructured.Unstructured) (string, error) {
 	return "", nil
 }
 
-func isKubeApiserverPod(u *unstructured.Unstructured) bool {
-	if !strings.HasPrefix(u.GetName(), "kube-apiserver-") {
+func isKubeApiserverPod(pod *corev1.Pod) bool {
+	if !strings.HasPrefix(pod.GetName(), "kube-apiserver-") {
 		return false
 	}
 
-	labels := u.GetLabels()
+	labels := pod.GetLabels()
 	return labels["component"] == "kube-apiserver"
 }
