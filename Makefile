@@ -1,5 +1,5 @@
-.PHONY: tests
-tests:
+.PHONY: test
+test:
 	go test ./...
 
 .PHONY: lint
