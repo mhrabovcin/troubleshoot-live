@@ -6,14 +6,14 @@ The tools is heavily inspired by existing [`sbctl`](https://github.com/replicate
 
 The flow is the following:
 
-* First the version of the Kubernetes API server from which was the support bundle collected is detected. The [`cluster-info`](https://troubleshoot.sh/docs/collect/cluster-info/) collector stores this information in the bundle.
-* CRDs are loaded from bundle.
-* Kubernetes API server and etcd for detected version are downloaded using the envtest.
-* Kuberentes API server is started.
-* Resources from the bundle are imported to the API server.
-* A new proxy HTTP server is launched that will expose Kubernetes API server (default on `localhost:8080`)
+- First the version of the Kubernetes API server from which was the support bundle collected is detected. The [`cluster-info`](https://troubleshoot.sh/docs/collect/cluster-info/) collector stores this information in the bundle.
+- CRDs are loaded from bundle.
+- Kubernetes API server and etcd for detected version are downloaded using the envtest.
+- Kuberentes API server is started.
+- Resources from the bundle are imported to the API server.
+- A new proxy HTTP server is launched that will expose Kubernetes API server (default on `localhost:8080`)
 
 The proxy server allows to define on which address is the API server available. It also enables providing some custom functionality that wouldn't be possible with launched API server:
 
-* The `creationTimestamp` is not preserverd when imported from the bundle files. The proxy handler mutates API server responses and replaces `creationTimestamp` with data from the bundle.
-* A custom handler for serving logs data from the support bundle. This allows to use `kubectl` and other tools to retrieve logs for pods.
+- The `creationTimestamp` is not preserverd when imported from the bundle files. The proxy handler mutates API server responses and replaces `creationTimestamp` with data from the bundle.
+- A custom handler for serving logs data from the support bundle. This allows to use `kubectl` and other tools to retrieve logs for pods.
