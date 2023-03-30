@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/mesosphere/dkp-cli-runtime/core/output"
+	"github.com/pkg/errors"
 	"github.com/spf13/afero"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -148,7 +149,7 @@ func importClusterResources(
 
 		list, err := bundle.LoadResourcesFromFile(cfg.bundle, path)
 		if err != nil {
-			cfg.out.Errorf(err, "Failed to load resources from file %q", path)
+			cfg.out.Errorf(maxErrorString(err, 200), "Failed to load resources from file %q", path)
 			return nil
 		}
 
@@ -214,7 +215,7 @@ func importCMOrSecrets(
 
 		obj, err := loadFn(cfg.bundle, path)
 		if err != nil {
-			cfg.out.Errorf(err, "Failed to import secret from %q", path)
+			cfg.out.Errorf(maxErrorString(err, 200), "Failed to import secret from %q", path)
 			return nil
 		}
 
@@ -312,10 +313,10 @@ func createResource(ctx context.Context, u *unstructured.Unstructured, includeSt
 	return nil
 }
 
-func maxErrorString(err error, maxSize int) string {
+func maxErrorString(err error, maxSize int) error {
 	errorStr := err.Error()
 	if len(errorStr) > maxSize {
-		errorStr = errorStr[:maxSize]
+		return errors.New(errorStr)
 	}
-	return errorStr
+	return err
 }
