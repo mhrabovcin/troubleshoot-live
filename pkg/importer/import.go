@@ -69,6 +69,11 @@ func importNamespaces(
 		return err
 	}
 
+	populateGVK(list, schema.GroupVersionKind{
+		Version: "v1",
+		Kind:    "Namespace",
+	})
+
 	namespaces := []string{}
 	gvr, includeStatus, err := detectGVR(discoveryClient, &list.Items[0])
 	if err != nil {
@@ -95,6 +100,8 @@ func importClusterResources(
 		"resources.json",
 		// api-groups from the discovery client
 		"groups.json",
+		// namespaces are imported as first resource in a separate step
+		"namespaces.json",
 	}
 
 	skipDirs := []string{
@@ -136,6 +143,18 @@ func importClusterResources(
 			return nil
 		}
 
+		// Kind was not stored in older troubleshoot versions for non-CRDs, try to
+		// figure out the kind by the filename.
+		if list.Items[0].GetKind() == "" {
+			relPath, err := filepath.Rel(b.Layout().ClusterResources(), path)
+			if err != nil {
+				return fmt.Errorf("failed to detect kind for path %q: %w", path, err)
+			}
+			if gvk, err := gvkFromFile(relPath); err == nil {
+				populateGVK(list, gvk)
+			}
+		}
+
 		log.Printf("Importing objects from: %s ... \n", path)
 
 		gvr, includeStatus, err := detectGVR(discoveryClient, &list.Items[0])
@@ -160,15 +179,16 @@ func importClusterResources(
 
 type cmOrSecretLoadFn func(afero.Fs, string) (*unstructured.Unstructured, error)
 
-func importCMOrSecret(
+func importCMOrSecrets(
 	ctx context.Context,
 	b bundle.Bundle,
 	_ discovery.DiscoveryInterface,
 	dynamicClient *dynamic.DynamicClient,
+	path string,
 	loadFn cmOrSecretLoadFn,
 	gvr schema.GroupVersionResource,
 ) error {
-	return afero.Walk(b, b.Layout().ConfigMaps(), func(path string, info fs.FileInfo, err error) error {
+	return afero.Walk(b, path, func(path string, info fs.FileInfo, err error) error {
 		if err != nil {
 			log.Printf(" x error reading file %q: %s\n", path, err)
 			return nil
@@ -204,8 +224,8 @@ func importCMs(
 		Version:  "v1",
 		Resource: "configmaps",
 	}
-	return importCMOrSecret(
-		ctx, b, discoveryClient, dynamicClient, bundle.LoadConfigMap, gvr)
+	return importCMOrSecrets(
+		ctx, b, discoveryClient, dynamicClient, b.Layout().ConfigMaps(), bundle.LoadConfigMap, gvr)
 }
 
 func importSecrets(
@@ -218,8 +238,8 @@ func importSecrets(
 		Version:  "v1",
 		Resource: "secrets",
 	}
-	return importCMOrSecret(
-		ctx, b, discoveryClient, dynamicClient, bundle.LoadSecret, gvr)
+	return importCMOrSecrets(
+		ctx, b, discoveryClient, dynamicClient, b.Layout().Secrets(), bundle.LoadSecret, gvr)
 }
 
 func importObject(

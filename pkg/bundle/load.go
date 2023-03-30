@@ -33,6 +33,13 @@ func LoadCRDs(b Bundle) ([]*apiextensionsv1.CustomResourceDefinition, error) {
 
 	bundleCrds := []*apiextensionsv1.CustomResourceDefinition{}
 	for i := range crdList.Items {
+		// Old versions of `troubleshoot` weren't always collecting the latest
+		// version of the resources, e.g. collected `v1beta1` instead of `v1`.
+		// If the CRD contains conversion config the envtest k8s api server
+		// will try to execute the webhook and fail to import all the resources.
+		// In order to try importing all the resources remove the conversion webhook
+		// and let the validation fail for incorrect resources.
+		crdList.Items[i].Spec.Conversion = nil
 		bundleCrds = append(bundleCrds, &crdList.Items[i])
 	}
 	return bundleCrds, nil

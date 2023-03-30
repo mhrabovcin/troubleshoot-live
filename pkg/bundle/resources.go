@@ -25,7 +25,20 @@ func LoadResourcesFromFile(bundle afero.Fs, path string) (*unstructured.Unstruct
 
 	if strings.HasSuffix(path, ".json") {
 		err := json.Unmarshal(data, list)
-		return list, err
+		if err == nil {
+			return list, nil
+		}
+
+		items := []map[string]any{}
+		if err := json.Unmarshal(data, &items); err != nil {
+			return nil, fmt.Errorf("failed to load items from %q: %w", path, err)
+		}
+
+		for _, item := range items {
+			list.Items = append(list.Items, unstructured.Unstructured{Object: item})
+		}
+
+		return list, nil
 	}
 
 	if strings.HasSuffix(path, ".yaml") || strings.HasSuffix(path, ".yml") {
