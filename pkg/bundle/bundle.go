@@ -37,25 +37,7 @@ func New(path string) (Bundle, error) {
 	var fs afero.Fs
 
 	switch {
-	// TODO: add a check for file size, if trying to open a large bundle in
-	// memory.
 	case strings.HasSuffix(path, ".tar.gz"):
-		// f, err := os.Open(path)
-		// if err != nil {
-		// 	return nil, err
-		// }
-		// gz, err := gzip.NewReader(f)
-		// if err != nil {
-		// 	return nil, err
-		// }
-		// // troubleshoot.sh generates support bundle with single directory in it
-		// // Walk is not working for tar archive in aferofs:
-		// // https://github.com/spf13/afero/issues/281
-		// fs = afero.NewBasePathFs(
-		// 	tarfs.New(tar.NewReader(gz)),
-		// 	filepath.Base(strings.TrimSuffix(path, ".tar.gz")),
-		// )
-
 		baseDir := filepath.Join(os.TempDir(), "troubleshoot-live")
 		fi, err := os.Stat(path)
 		if err != nil {
