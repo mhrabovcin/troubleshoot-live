@@ -80,7 +80,7 @@ func runServe(bundlePath string, o *serveOptions, out output.Output) error {
 	}()
 
 	out.StartOperation("Importing bundle resources")
-	err = importer.ImportBundle(ctx, supportBundle, testEnv.Config)
+	err = importer.ImportBundle(ctx, supportBundle, testEnv.Config, out)
 	out.EndOperation(err == nil)
 	if err != nil {
 		out.Error(err, "failed to import support bundle content to k8s api server: %w")

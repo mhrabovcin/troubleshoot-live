@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/mesosphere/dkp-cli-runtime/core/output"
 	"github.com/spf13/afero"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -28,18 +29,23 @@ func AnnotationForOriginalValue(name string) string {
 	return fmt.Sprintf("support-bundle-live/%s", name)
 }
 
-type importerFn func(context.Context, bundle.Bundle, discovery.DiscoveryInterface, *dynamic.DynamicClient) error
-
 // ImportBundle creates resources in provided API server.
-func ImportBundle(ctx context.Context, b bundle.Bundle, cfg *rest.Config) error {
-	dynamicClient, err := dynamic.NewForConfig(cfg)
+func ImportBundle(ctx context.Context, b bundle.Bundle, restCfg *rest.Config, out output.Output) error {
+	dynamicClient, err := dynamic.NewForConfig(restCfg)
 	if err != nil {
 		return err
 	}
 
-	discoveryClient, err := discovery.NewDiscoveryClientForConfig(cfg)
+	discoveryClient, err := discovery.NewDiscoveryClientForConfig(restCfg)
 	if err != nil {
 		return err
+	}
+
+	cfg := &importerConfig{
+		dynamicClient:   dynamicClient,
+		discoveryClient: discoveryClient,
+		bundle:          b,
+		out:             out,
 	}
 
 	importers := []importerFn{
@@ -50,7 +56,7 @@ func ImportBundle(ctx context.Context, b bundle.Bundle, cfg *rest.Config) error 
 	}
 
 	for _, importerFn := range importers {
-		if err := importerFn(ctx, b, discoveryClient, dynamicClient); err != nil {
+		if err := importerFn(ctx, cfg); err != nil {
 			return err
 		}
 	}
@@ -58,13 +64,23 @@ func ImportBundle(ctx context.Context, b bundle.Bundle, cfg *rest.Config) error 
 	return nil
 }
 
+type importerConfig struct {
+	dynamicClient   dynamic.Interface
+	discoveryClient discovery.DiscoveryInterface
+	bundle          bundle.Bundle
+	out             output.Output
+}
+
+type importerFn func(context.Context, *importerConfig) error
+
 func importNamespaces(
 	ctx context.Context,
-	b bundle.Bundle,
-	discoveryClient discovery.DiscoveryInterface,
-	dynamicClient *dynamic.DynamicClient,
+	cfg *importerConfig,
 ) error {
-	list, err := bundle.LoadResourcesFromFile(b, filepath.Join(b.Layout().ClusterResources(), "namespaces.json"))
+	list, err := bundle.LoadResourcesFromFile(
+		cfg.bundle,
+		filepath.Join(cfg.bundle.Layout().ClusterResources(), "namespaces.json"),
+	)
 	if err != nil {
 		return err
 	}
@@ -75,22 +91,20 @@ func importNamespaces(
 	})
 
 	namespaces := []string{}
-	gvr, includeStatus, err := detectGVR(discoveryClient, &list.Items[0])
+	gvr, includeStatus, err := detectGVR(cfg.discoveryClient, &list.Items[0])
 	if err != nil {
 		return err
 	}
 	return list.EachListItem(func(o runtime.Object) error {
 		u, _ := meta.Accessor(o)
 		namespaces = append(namespaces, u.GetName())
-		return importObject(ctx, dynamicClient, gvr, o, includeStatus)
+		return importObject(ctx, cfg.dynamicClient, gvr, o, includeStatus)
 	})
 }
 
 func importClusterResources(
 	ctx context.Context,
-	b bundle.Bundle,
-	discoveryClient discovery.DiscoveryInterface,
-	dynamicClient *dynamic.DynamicClient,
+	cfg *importerConfig,
 ) error {
 	skipResources := []string{
 		// crds are imported during the envtest startup
@@ -109,7 +123,7 @@ func importClusterResources(
 		"pod-disruption-budgets",
 	}
 
-	return afero.Walk(b, b.Layout().ClusterResources(), func(path string, info fs.FileInfo, err error) error {
+	return afero.Walk(cfg.bundle, cfg.bundle.Layout().ClusterResources(), func(path string, info fs.FileInfo, err error) error {
 		if err != nil {
 			log.Printf(" x error reading file %q: %s\n", path, err)
 			return nil
@@ -133,7 +147,7 @@ func importClusterResources(
 			return nil
 		}
 
-		list, err := bundle.LoadResourcesFromFile(b, path)
+		list, err := bundle.LoadResourcesFromFile(cfg.bundle, path)
 		if err != nil {
 			log.Printf(" x Failed to import %q with error: %s\n", path, maxErrorString(err, 200))
 			return nil
@@ -146,7 +160,7 @@ func importClusterResources(
 		// Kind was not stored in older troubleshoot versions for non-CRDs, try to
 		// figure out the kind by the filename.
 		if list.Items[0].GetKind() == "" {
-			relPath, err := filepath.Rel(b.Layout().ClusterResources(), path)
+			relPath, err := filepath.Rel(cfg.bundle.Layout().ClusterResources(), path)
 			if err != nil {
 				return fmt.Errorf("failed to detect kind for path %q: %w", path, err)
 			}
@@ -157,13 +171,13 @@ func importClusterResources(
 
 		log.Printf("Importing objects from: %s ... \n", path)
 
-		gvr, includeStatus, err := detectGVR(discoveryClient, &list.Items[0])
+		gvr, includeStatus, err := detectGVR(cfg.discoveryClient, &list.Items[0])
 		if err != nil {
 			return fmt.Errorf("failed to detect GVR from file %q: %w", path, err)
 		}
 
 		_ = list.EachListItem(func(o runtime.Object) error {
-			err := importObject(ctx, dynamicClient, gvr, o, includeStatus)
+			err := importObject(ctx, cfg.dynamicClient, gvr, o, includeStatus)
 			if err != nil {
 				u, _ := meta.Accessor(o)
 				log.Printf(" x Failed to import %q (%s) with error: %s\n",
@@ -181,14 +195,12 @@ type cmOrSecretLoadFn func(afero.Fs, string) (*unstructured.Unstructured, error)
 
 func importCMOrSecrets(
 	ctx context.Context,
-	b bundle.Bundle,
-	_ discovery.DiscoveryInterface,
-	dynamicClient *dynamic.DynamicClient,
+	cfg *importerConfig,
 	path string,
 	loadFn cmOrSecretLoadFn,
 	gvr schema.GroupVersionResource,
 ) error {
-	return afero.Walk(b, path, func(path string, info fs.FileInfo, err error) error {
+	return afero.Walk(cfg.bundle, path, func(path string, info fs.FileInfo, err error) error {
 		if err != nil {
 			log.Printf(" x error reading file %q: %s\n", path, err)
 			return nil
@@ -200,13 +212,13 @@ func importCMOrSecrets(
 
 		log.Printf("Importing %s from: %s ... \n", gvr.Resource, path)
 
-		obj, err := loadFn(b, path)
+		obj, err := loadFn(cfg.bundle, path)
 		if err != nil {
 			log.Printf(" x Failed to import %q with error: %s\n", path, maxErrorString(err, 200))
 			return nil
 		}
 
-		if err := importObject(ctx, dynamicClient, gvr, obj, true); err != nil {
+		if err := importObject(ctx, cfg.dynamicClient, gvr, obj, true); err != nil {
 			return err
 		}
 
@@ -216,35 +228,31 @@ func importCMOrSecrets(
 
 func importCMs(
 	ctx context.Context,
-	b bundle.Bundle,
-	discoveryClient discovery.DiscoveryInterface,
-	dynamicClient *dynamic.DynamicClient,
+	cfg *importerConfig,
 ) error {
 	gvr := schema.GroupVersionResource{
 		Version:  "v1",
 		Resource: "configmaps",
 	}
 	return importCMOrSecrets(
-		ctx, b, discoveryClient, dynamicClient, b.Layout().ConfigMaps(), bundle.LoadConfigMap, gvr)
+		ctx, cfg, cfg.bundle.Layout().ConfigMaps(), bundle.LoadConfigMap, gvr)
 }
 
 func importSecrets(
 	ctx context.Context,
-	b bundle.Bundle,
-	discoveryClient discovery.DiscoveryInterface,
-	dynamicClient *dynamic.DynamicClient,
+	cfg *importerConfig,
 ) error {
 	gvr := schema.GroupVersionResource{
 		Version:  "v1",
 		Resource: "secrets",
 	}
 	return importCMOrSecrets(
-		ctx, b, discoveryClient, dynamicClient, b.Layout().Secrets(), bundle.LoadSecret, gvr)
+		ctx, cfg, cfg.bundle.Layout().Secrets(), bundle.LoadSecret, gvr)
 }
 
 func importObject(
 	ctx context.Context,
-	cl *dynamic.DynamicClient,
+	cl dynamic.Interface,
 	gvr schema.GroupVersionResource,
 	o runtime.Object,
 	includeStatus bool,
