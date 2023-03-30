@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
-	"log"
 	"path/filepath"
 	"strings"
 
@@ -125,7 +124,7 @@ func importClusterResources(
 
 	return afero.Walk(cfg.bundle, cfg.bundle.Layout().ClusterResources(), func(path string, info fs.FileInfo, err error) error {
 		if err != nil {
-			log.Printf(" x error reading file %q: %s\n", path, err)
+			cfg.out.Warnf("Failed to read file %q from bundle: %s", path, err)
 			return nil
 		}
 
@@ -149,7 +148,7 @@ func importClusterResources(
 
 		list, err := bundle.LoadResourcesFromFile(cfg.bundle, path)
 		if err != nil {
-			log.Printf(" x Failed to import %q with error: %s\n", path, maxErrorString(err, 200))
+			cfg.out.Errorf(err, "Failed to load resources from file %q", path)
 			return nil
 		}
 
@@ -169,7 +168,7 @@ func importClusterResources(
 			}
 		}
 
-		log.Printf("Importing objects from: %s ... \n", path)
+		cfg.out.V(1).Infof("Importing objects from: %s ...", path)
 
 		gvr, includeStatus, err := detectGVR(cfg.discoveryClient, &list.Items[0])
 		if err != nil {
@@ -180,7 +179,8 @@ func importClusterResources(
 			err := importObject(ctx, cfg.dynamicClient, gvr, o, includeStatus)
 			if err != nil {
 				u, _ := meta.Accessor(o)
-				log.Printf(" x Failed to import %q (%s) with error: %s\n",
+				cfg.out.Warnf(
+					"Failed to import %q (%s) with error: %s",
 					fmt.Sprintf("%s/%s", u.GetNamespace(), u.GetName()), gvr, err,
 				)
 			}
@@ -202,7 +202,7 @@ func importCMOrSecrets(
 ) error {
 	return afero.Walk(cfg.bundle, path, func(path string, info fs.FileInfo, err error) error {
 		if err != nil {
-			log.Printf(" x error reading file %q: %s\n", path, err)
+			cfg.out.Errorf(err, "Failed to read file %q from bundle", path)
 			return nil
 		}
 
@@ -210,11 +210,11 @@ func importCMOrSecrets(
 			return nil
 		}
 
-		log.Printf("Importing %s from: %s ... \n", gvr.Resource, path)
+		cfg.out.V(1).Infof("Importing %s from: %s ... ", gvr.Resource, path)
 
 		obj, err := loadFn(cfg.bundle, path)
 		if err != nil {
-			log.Printf(" x Failed to import %q with error: %s\n", path, maxErrorString(err, 200))
+			cfg.out.Errorf(err, "Failed to import secret from %q", path)
 			return nil
 		}
 
