@@ -1,5 +1,6 @@
 GORELEASER_PARALLELISM ?= $(shell nproc --ignore=1)
 GORELEASER_DEBUG ?= false
+export DOCKERHUB_ORG ?= mhrabovcin
 export GIT_TREE_STATE ?=
 
 .PHONY: test
