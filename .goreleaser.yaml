@@ -96,7 +96,7 @@ dockers:
 docker_manifests:
   - name_template: ghcr.io/{{ .Env.DOCKERHUB_ORG }}/{{ .ProjectName }}:v{{trimprefix .Version "v"}}
     image_templates:
-    - ghcr.io//{{ .Env.DOCKERHUB_ORG }}/{{ .ProjectName }}:v{{trimprefix .Version "v"}}-amd64
+    - ghcr.io/{{ .Env.DOCKERHUB_ORG }}/{{ .ProjectName }}:v{{trimprefix .Version "v"}}-amd64
     - ghcr.io/{{ .Env.DOCKERHUB_ORG }}/{{ .ProjectName }}:v{{trimprefix .Version "v"}}-arm64v8
 
 checksum:
