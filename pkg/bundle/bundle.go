@@ -89,9 +89,16 @@ func New(path string) (Bundle, error) {
 			log.Printf("Using already extracted support bundle in %q ...", tmpDir)
 		}
 
-		// TODO: detect extracted path, assume dir same as archive name
-		dirname := filepath.Base(strings.TrimSuffix(path, ".tar.gz"))
-		fs = fromDir(filepath.Join(tmpDir, dirname))
+		entries, err := os.ReadDir(tmpDir)
+		if err != nil {
+			return nil, fmt.Errorf("failed to locate bundle directory form archive: %w", err)
+		}
+
+		if len(entries) != 1 {
+			return nil, fmt.Errorf("more than 1 directory in archive, cannot infer bundle directory")
+		}
+
+		fs = fromDir(filepath.Join(tmpDir, entries[0].Name()))
 	default:
 		isDir, err := afero.IsDir(afero.NewOsFs(), path)
 		if err != nil {
