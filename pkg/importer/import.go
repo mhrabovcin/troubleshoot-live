@@ -2,13 +2,13 @@ package importer
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"path/filepath"
 	"strings"
 
 	"github.com/mesosphere/dkp-cli-runtime/core/output"
-	"github.com/pkg/errors"
 	"github.com/spf13/afero"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
