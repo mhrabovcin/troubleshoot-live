@@ -9,6 +9,7 @@ require (
 	github.com/mesosphere/dkp-cli-runtime/core v0.7.1
 	github.com/spf13/afero v1.9.5
 	github.com/spf13/cobra v1.6.1
+	github.com/stretchr/testify v1.8.2
 	k8s.io/api v0.26.3
 	k8s.io/apiextensions-apiserver v0.26.1
 	k8s.io/apimachinery v0.26.3
@@ -44,8 +45,6 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
-	github.com/stretchr/objx v0.5.0 // indirect
-	github.com/stretchr/testify v1.8.2 // indirect
 	golang.org/x/net v0.7.0 // indirect
 	golang.org/x/oauth2 v0.0.0-20220223155221-ee480838109b // indirect
 	golang.org/x/sys v0.5.0 // indirect
