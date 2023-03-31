@@ -2,9 +2,11 @@ package bundle
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
+	"github.com/mhrabovcin/troubleshoot-live/pkg/utils"
 	"github.com/spf13/afero"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -14,7 +16,11 @@ import (
 )
 
 // LoadResourcesFromFile tries to k8s API resources from a given file. It supports
-// resources stored as List kind or YAML array of separate resources.
+// resources stored as List kind, YAML array of separate resources, JSON array of
+// resources and JSON stored item list without TypeMeta information.
+// The result will be returned as `UnstructuredList` but the items could be missing
+// GVK information. It is up to caller to add GVK to each item before further
+// processing.
 func LoadResourcesFromFile(bundle afero.Fs, path string) (*unstructured.UnstructuredList, error) {
 	list := &unstructured.UnstructuredList{}
 
@@ -24,21 +30,51 @@ func LoadResourcesFromFile(bundle afero.Fs, path string) (*unstructured.Unstruct
 	}
 
 	if strings.HasSuffix(path, ".json") {
+		// Format:
+		// - stored as unstructured.UnstructedList and items contain GVK info
 		err := json.Unmarshal(data, list)
 		if err == nil {
 			return list, nil
 		}
+		errs := []error{err}
 
+		// Format:
+		// - no GVK info in objects
+		// [ {}, {}, ... {} ]
 		items := []map[string]any{}
-		if err := json.Unmarshal(data, &items); err != nil {
-			return nil, fmt.Errorf("failed to load items from %q: %w", path, err)
+		if secondErr := json.Unmarshal(data, &items); secondErr != nil {
+			errs = append(errs, secondErr)
+		} else {
+			for _, item := range items {
+				list.Items = append(list.Items, unstructured.Unstructured{Object: item})
+			}
+			return list, nil
 		}
 
-		for _, item := range items {
-			list.Items = append(list.Items, unstructured.Unstructured{Object: item})
+		// Format:
+		// - similar to unstructured list but objects do not contain GVK info
+		// {
+		//	"metadata": { ... }
+		//  "items": [ {}, {}, ... {}]
+		// }
+		//
+		untypedList := struct {
+			Items []map[string]any `json:"items"`
+		}{}
+		if thirdErr := json.Unmarshal(data, &untypedList); thirdErr != nil {
+			errs = append(errs, thirdErr)
+		} else {
+			for _, item := range untypedList.Items {
+				list.Items = append(list.Items, unstructured.Unstructured{Object: item})
+			}
+			return list, nil
 		}
 
-		return list, nil
+		for i := range errs {
+			errs[i] = utils.MaxErrorString(errs[i], 200)
+		}
+
+		return nil, errors.Join(errs...)
 	}
 
 	if strings.HasSuffix(path, ".yaml") || strings.HasSuffix(path, ".yml") {
