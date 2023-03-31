@@ -83,7 +83,7 @@ func runServe(bundlePath string, o *serveOptions, out output.Output) error {
 	err = importer.ImportBundle(ctx, supportBundle, testEnv.Config, out)
 	out.EndOperation(err == nil)
 	if err != nil {
-		out.Error(err, "failed to import support bundle content to k8s api server: %w")
+		out.Error(err, "failed to import support bundle content to k8s api server")
 	}
 
 	proxyHTTPAddress := fmt.Sprintf("http://%s", o.proxyAddress)
@@ -105,20 +105,10 @@ func startK8sServer(
 	out output.Output,
 	opts *serveOptions,
 ) (*envtest.Environment, error) {
-	bundleCRDs, err := bundle.LoadCRDs(supportBundle)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load CRDs from bundle: %w", err)
-	}
-	if err := importer.PrepareSliceForImport(bundleCRDs); err != nil {
-		return nil, err
-	}
-	out.Infof("Detected %d CRDs", len(bundleCRDs))
-
 	testEnv, err := envtest.Prepare(ctx, supportBundle, envtest.Arch(opts.envtestArch))
 	if err != nil {
 		return nil, fmt.Errorf("failed to prepare k8s environment: %w", err)
 	}
-	testEnv.CRDs = bundleCRDs
 	ipRange, err := bundle.DetectServiceSubnetRange(supportBundle)
 	if err != nil {
 		return nil, err

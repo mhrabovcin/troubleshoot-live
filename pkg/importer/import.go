@@ -19,6 +19,7 @@ import (
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/util/retry"
 	"k8s.io/utils/strings/slices"
 
 	"github.com/mhrabovcin/troubleshoot-live/pkg/bundle"
@@ -49,6 +50,7 @@ func ImportBundle(ctx context.Context, b bundle.Bundle, restCfg *rest.Config, ou
 	}
 
 	importers := []importerFn{
+		importCRDs,
 		importNamespaces,
 		importClusterResources,
 		importCMs,
@@ -107,7 +109,7 @@ func importClusterResources(
 	cfg *importerConfig,
 ) error {
 	skipResources := []string{
-		// crds are imported during the envtest startup
+		// crds are imported during a separate step
 		"custom-resource-definitions.json",
 		"pod-disruption-budgets-info.json",
 		// api-resources from the discovery client
@@ -173,7 +175,8 @@ func importClusterResources(
 
 		gvr, includeStatus, err := detectGVR(cfg.discoveryClient, &list.Items[0])
 		if err != nil {
-			return fmt.Errorf("failed to detect GVR from file %q: %w", path, err)
+			cfg.out.Errorf(err, "failed to detect GVR from file %q. CRD for the resource may not be imported:", path)
+			return nil
 		}
 
 		_ = list.EachListItem(func(o runtime.Object) error {
@@ -296,21 +299,22 @@ func createResource(ctx context.Context, u *unstructured.Unstructured, includeSt
 		return nil
 	}
 
-	updated, err := nsClient.Get(ctx, u.GetName(), metav1.GetOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to load created object: %w", err)
-	}
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		updated, err := nsClient.Get(ctx, u.GetName(), metav1.GetOptions{})
+		if err != nil {
+			return fmt.Errorf("failed to load created object: %w", err)
+		}
 
-	if err := unstructured.SetNestedField(updated.Object, u.Object["status"], "status"); err != nil {
-		return fmt.Errorf("failed to set status field: %w", err)
-	}
+		if err := unstructured.SetNestedField(updated.Object, u.Object["status"], "status"); err != nil {
+			return fmt.Errorf("failed to set status field: %w", err)
+		}
 
-	_, err = nsClient.UpdateStatus(ctx, updated, metav1.UpdateOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to update status: %w", err)
-	}
-
-	return nil
+		_, err = nsClient.UpdateStatus(ctx, updated, metav1.UpdateOptions{})
+		if err != nil {
+			return fmt.Errorf("failed to update status: %w", err)
+		}
+		return nil
+	})
 }
 
 func maxErrorString(err error, maxSize int) error {
