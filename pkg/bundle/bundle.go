@@ -1,14 +1,13 @@
 package bundle
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
+	"github.com/mholt/archiver/v3"
 	"github.com/spf13/afero"
 )
 
@@ -62,9 +61,7 @@ func New(path string) (Bundle, error) {
 
 		if len(existingDirItems) == 0 {
 			log.Printf("Extracting support bundle from %q to %q ...", path, tmpDir)
-			cmd := exec.CommandContext(
-				context.Background(), "tar", "xvzf", path, "-C", tmpDir)
-			if err := cmd.Run(); err != nil {
+			if err := unarchiveToDirectory(path, tmpDir); err != nil {
 				return nil, err
 			}
 		} else {
@@ -99,6 +96,31 @@ func New(path string) (Bundle, error) {
 	}
 
 	return bundle{fs}, nil
+}
+
+func unarchiveToDirectory(archive, destDir string) error {
+	archiverByExtension, err := archiver.ByExtension(archive)
+	if err != nil {
+		return fmt.Errorf("failed to identify archive format: %w", err)
+	}
+
+	unarc, ok := archiverByExtension.(archiver.Unarchiver)
+	if !ok {
+		return fmt.Errorf("not an valid archive extension")
+	}
+
+	switch t := unarc.(type) {
+	case *archiver.TarGz:
+		t.OverwriteExisting = true
+	case *archiver.Tar:
+		t.OverwriteExisting = true
+	}
+
+	if err := unarc.Unarchive(archive, destDir); err != nil {
+		return fmt.Errorf("failed to unarchive bundle: %w", err)
+	}
+
+	return nil
 }
 
 func fromDir(path string) afero.Fs {
