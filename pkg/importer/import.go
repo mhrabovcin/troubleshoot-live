@@ -262,7 +262,7 @@ func importObject(
 	o runtime.Object,
 	includeStatus bool,
 ) error {
-	if err := PrepareForImport(o); err != nil {
+	if err := prepareForImport(o); err != nil {
 		return err
 	}
 
