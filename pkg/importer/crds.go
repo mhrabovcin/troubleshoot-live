@@ -21,7 +21,7 @@ func loadCRDs(b bundle.Bundle) (*unstructured.UnstructuredList, error) {
 	crdsPath := filepath.Join(b.Layout().ClusterResources(), "custom-resource-definitions.json")
 	list, err := bundle.LoadResourcesFromFile(b, crdsPath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to load CRDs: %w", err)
 	}
 
 	for i := range list.Items {

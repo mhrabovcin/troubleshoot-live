@@ -74,7 +74,7 @@ func LoadResourcesFromFile(bundle afero.Fs, path string) (*unstructured.Unstruct
 			errs[i] = utils.MaxErrorString(errs[i], 200)
 		}
 
-		return nil, errors.Join(errs...)
+		return nil, fmt.Errorf("failed to load resources from JSON file %q with errors: %w", path, errors.Join(errs...))
 	}
 
 	if strings.HasSuffix(path, ".yaml") || strings.HasSuffix(path, ".yml") {

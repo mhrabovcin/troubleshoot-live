@@ -83,7 +83,7 @@ func runServe(bundlePath string, o *serveOptions, out output.Output) error {
 	err = importer.ImportBundle(ctx, supportBundle, testEnv.Config, out)
 	out.EndOperation(err == nil)
 	if err != nil {
-		out.Error(err, "failed to import support bundle content to k8s api server")
+		out.Error(err, "failed to import support bundle resources to API server")
 	}
 
 	proxyHTTPAddress := fmt.Sprintf("http://%s", o.proxyAddress)

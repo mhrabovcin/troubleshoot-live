@@ -2,7 +2,6 @@ package importer
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io/fs"
 	"path/filepath"
@@ -23,6 +22,7 @@ import (
 	"k8s.io/utils/strings/slices"
 
 	"github.com/mhrabovcin/troubleshoot-live/pkg/bundle"
+	"github.com/mhrabovcin/troubleshoot-live/pkg/utils"
 )
 
 // AnnotationForOriginalValue creates annotation key for given value.
@@ -151,7 +151,7 @@ func importClusterResources(
 
 		list, err := bundle.LoadResourcesFromFile(cfg.bundle, path)
 		if err != nil {
-			cfg.out.Errorf(maxErrorString(err, 200), "Failed to load resources from file %q", path)
+			cfg.out.Errorf(utils.MaxErrorString(err, 200), "Failed to load resources from file %q", path)
 			return nil
 		}
 
@@ -218,7 +218,7 @@ func importCMOrSecrets(
 
 		obj, err := loadFn(cfg.bundle, path)
 		if err != nil {
-			cfg.out.Errorf(maxErrorString(err, 200), "Failed to import secret from %q", path)
+			cfg.out.Errorf(utils.MaxErrorString(err, 200), "Failed to import secret from %q", path)
 			return nil
 		}
 
@@ -315,12 +315,4 @@ func createResource(ctx context.Context, u *unstructured.Unstructured, includeSt
 		}
 		return nil
 	})
-}
-
-func maxErrorString(err error, maxSize int) error {
-	errorStr := err.Error()
-	if len(errorStr) > maxSize {
-		return errors.New(errorStr)
-	}
-	return err
 }
