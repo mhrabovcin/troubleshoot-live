@@ -33,8 +33,6 @@ func (bundle) Layout() Layout {
 // bundle from a directory or a `tar.gz` archive, which is automatically extracted
 // to a temporary folder.
 func New(path string) (Bundle, error) {
-	var fs afero.Fs
-
 	switch {
 	case strings.HasSuffix(path, ".tar.gz"):
 		fi, err := os.Stat(path)
@@ -79,7 +77,7 @@ func New(path string) (Bundle, error) {
 			return nil, fmt.Errorf("more than 1 directory in archive, cannot infer bundle directory")
 		}
 
-		fs = fromDir(filepath.Join(tmpDir, entries[0].Name()))
+		return FromFs(fromDir(filepath.Join(tmpDir, entries[0].Name()))), nil
 	default:
 		absPath, err := filepath.Abs(path)
 		if err != nil {
@@ -95,14 +93,15 @@ func New(path string) (Bundle, error) {
 			break
 		}
 
-		fs = fromDir(absPath)
+		return FromFs(fromDir(absPath)), nil
 	}
 
-	if fs == nil {
-		return nil, ErrUnknownBundleFormat
-	}
+	return nil, ErrUnknownBundleFormat
+}
 
-	return bundle{fs}, nil
+// FromFs allows to create bundle form provided afero.Fs.
+func FromFs(fs afero.Fs) Bundle {
+	return bundle{fs}
 }
 
 func unarchiveToDirectory(archive, destDir string) error {

@@ -15,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/mhrabovcin/troubleshoot-live/pkg/bundle"
+	"github.com/mhrabovcin/troubleshoot-live/pkg/cli"
 )
 
 func loadCRDs(b bundle.Bundle) (*unstructured.UnstructuredList, error) {
@@ -68,6 +69,10 @@ func importCRDs(
 ) error {
 	list, err := loadCRDs(cfg.bundle)
 	if err != nil {
+		cli.WarnOnErrorsFilePresence(
+			cfg.bundle, cfg.out,
+			filepath.Join(cfg.bundle.Layout().ClusterResources(), "custom-resource-definitions.json"),
+		)
 		return err
 	}
 

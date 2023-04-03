@@ -22,6 +22,7 @@ import (
 	"k8s.io/utils/strings/slices"
 
 	"github.com/mhrabovcin/troubleshoot-live/pkg/bundle"
+	"github.com/mhrabovcin/troubleshoot-live/pkg/cli"
 	"github.com/mhrabovcin/troubleshoot-live/pkg/utils"
 )
 
@@ -79,11 +80,10 @@ func importNamespaces(
 	ctx context.Context,
 	cfg *importerConfig,
 ) error {
-	list, err := bundle.LoadResourcesFromFile(
-		cfg.bundle,
-		filepath.Join(cfg.bundle.Layout().ClusterResources(), "namespaces.json"),
-	)
+	namespacesPath := filepath.Join(cfg.bundle.Layout().ClusterResources(), "namespaces.json")
+	list, err := bundle.LoadResourcesFromFile(cfg.bundle, namespacesPath)
 	if err != nil {
+		cli.WarnOnErrorsFilePresence(cfg.bundle, cfg.out, namespacesPath)
 		return err
 	}
 
@@ -151,6 +151,7 @@ func importClusterResources(
 
 		list, err := bundle.LoadResourcesFromFile(cfg.bundle, path)
 		if err != nil {
+			cli.WarnOnErrorsFilePresence(cfg.bundle, cfg.out, path)
 			cfg.out.Errorf(utils.MaxErrorString(err, 200), "Failed to load resources from file %q", path)
 			return nil
 		}
