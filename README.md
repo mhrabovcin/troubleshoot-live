@@ -21,4 +21,4 @@ The proxy server allows to define on which address is the API server available. 
 ## Installation
 
 - Download and unpack a release from the Release page.
-- Use the `asdf` plugin https://github.com/adyatlov/asdf-troubleshoot-live
+- Use the `asdf` [plugin](https://github.com/adyatlov/asdf-troubleshoot-live).

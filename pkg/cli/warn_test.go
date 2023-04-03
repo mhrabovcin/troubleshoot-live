@@ -5,10 +5,11 @@ import (
 	"testing"
 
 	"github.com/mesosphere/dkp-cli-runtime/core/output"
-	"github.com/mhrabovcin/troubleshoot-live/pkg/bundle"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/mhrabovcin/troubleshoot-live/pkg/bundle"
 )
 
 func TestWarnOnErrorsFilePresence(t *testing.T) {
