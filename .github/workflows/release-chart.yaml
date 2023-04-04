@@ -11,6 +11,11 @@ jobs:
   release-chart:
     runs-on: ubuntu-22.04
     steps:
+      - name: Configure Git User
+        run: |
+          git config --global user.email "actions@users.noreply.github.com"
+          git config --global user.name  "${{ github.actor }}"
+
       - uses: actions/checkout@v3
         with:
           ref: ${{ github.ref }}
