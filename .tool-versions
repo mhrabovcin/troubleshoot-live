@@ -1,3 +1,4 @@
+helm 3.10.0
 golang 1.20.2
 golangci-lint 1.51.2
 pre-commit 3.1.1

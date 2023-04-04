@@ -9,6 +9,7 @@ test:
 
 .PHONY: lint
 lint:
+	helm lint --strict ./charts/troubleshoot-live
 	golangci-lint run --fix
 
 ifndef GORELEASER_CURRENT_TAG
