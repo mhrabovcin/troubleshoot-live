@@ -15,13 +15,14 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/mhrabovcin/troubleshoot-live/pkg/bundle"
+	"github.com/mhrabovcin/troubleshoot-live/pkg/cli"
 )
 
 func loadCRDs(b bundle.Bundle) (*unstructured.UnstructuredList, error) {
 	crdsPath := filepath.Join(b.Layout().ClusterResources(), "custom-resource-definitions.json")
 	list, err := bundle.LoadResourcesFromFile(b, crdsPath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to load CRDs: %w", err)
 	}
 
 	for i := range list.Items {
@@ -68,6 +69,10 @@ func importCRDs(
 ) error {
 	list, err := loadCRDs(cfg.bundle)
 	if err != nil {
+		cli.WarnOnErrorsFilePresence(
+			cfg.bundle, cfg.out,
+			filepath.Join(cfg.bundle.Layout().ClusterResources(), "custom-resource-definitions.json"),
+		)
 		return err
 	}
 

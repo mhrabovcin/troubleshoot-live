@@ -32,7 +32,7 @@ func NewServeCommand(out output.Output) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "serve SUPPORT_BUNDLE_PATH",
-		Short: "Starts a local envtest based k8s server",
+		Short: "Starts a local envtest based Kubernetes API server with bundle resources",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runServe(args[0], options, out)
@@ -83,7 +83,7 @@ func runServe(bundlePath string, o *serveOptions, out output.Output) error {
 	err = importer.ImportBundle(ctx, supportBundle, testEnv.Config, out)
 	out.EndOperation(err == nil)
 	if err != nil {
-		out.Error(err, "failed to import support bundle content to k8s api server")
+		out.Error(err, "failed to import support bundle resources to API server")
 	}
 
 	proxyHTTPAddress := fmt.Sprintf("http://%s", o.proxyAddress)
