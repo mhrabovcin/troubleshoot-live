@@ -1,0 +1,15 @@
+# Init containers can use volume `shared-data` to prepare bundle data for serve command.
+initContainers:
+  - name: download-bundle
+    image: alpine/curl
+    command: ['sh', '-c', "curl -fsL https://mh-test-kind.s3.us-west-2.amazonaws.com/sleepy-cohen-support-bundle-2023-03-31T07_18_45.tar.gz
+ -o /data/bundle.tar.gz"]
+    volumeMounts:
+      - name: shared-data
+        mountPath: /data
+
+# Provide run argument
+args: ["serve", "/data/bundle.tar.gz", "-v", "1", "--output-kubeconfig", "/data/support-bundle-kubeconfig", "--proxy-address", ":8080"]
+
+image:
+  tag: "v0.0.10"
