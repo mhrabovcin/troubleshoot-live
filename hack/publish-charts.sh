@@ -44,3 +44,4 @@ echo "To release charts, commit new files and index.yaml"
 
 # Cleanup temporary directories.
 rm -rf ${TEMP_DIR}
+
