@@ -43,3 +43,7 @@ release-snapshot:
 		--clean \
 		--parallelism=$(GORELEASER_PARALLELISM) \
 		--timeout=60m
+
+.PHONY: publish-helm-chart
+publish-helm-chart:
+	./hack/publish-charts.sh	

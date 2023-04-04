@@ -16,3 +16,6 @@
 
 *-kubeconfig
 dist
+
+# Generated charts
+troubleshoot-live-*.tgz
