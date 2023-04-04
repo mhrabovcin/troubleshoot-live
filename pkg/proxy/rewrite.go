@@ -4,21 +4,28 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"strconv"
-	"time"
 
-	"k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 
-	"github.com/mhrabovcin/troubleshoot-live/pkg/importer"
+	"github.com/mhrabovcin/troubleshoot-live/pkg/rewriter"
 )
 
-func rewriteResponseResourceFields(r *http.Response) (returnErr error) {
+func proxyModifyResponse(rr rewriter.ResourceRewriter) func(*http.Response) error {
+	r := &resourceRewriter{rewriter: rr}
+	return r.rewriteResponseResourceFields
+}
+
+type resourceRewriter struct {
+	rewriter rewriter.ResourceRewriter
+}
+
+func (rr *resourceRewriter) rewriteResponseResourceFields(r *http.Response) (returnErr error) {
 	if r.StatusCode != http.StatusOK {
 		return nil
 	}
@@ -41,7 +48,7 @@ func rewriteResponseResourceFields(r *http.Response) (returnErr error) {
 	// list requests.
 	if err := json.Unmarshal(data, &list); err == nil && len(list.Items) > 0 {
 		err := list.EachListItem(func(o runtime.Object) error {
-			if err := remapFields(o); err != nil {
+			if err := remapFields(o, rr.rewriter); err != nil {
 				log.Println(err)
 			}
 			return nil
@@ -63,7 +70,7 @@ func rewriteResponseResourceFields(r *http.Response) (returnErr error) {
 
 	u := &unstructured.Unstructured{}
 	if err := json.Unmarshal(data, &u); err == nil {
-		if err := remapFields(u); err != nil {
+		if err := remapFields(u, rr.rewriter); err != nil {
 			log.Println(err)
 			return nil
 		}
@@ -109,22 +116,33 @@ func writeResponseBody(r *http.Response, data []byte) error {
 	return nil
 }
 
-func remapFields(in runtime.Object) error {
-	o, err := meta.Accessor(in)
-	if err != nil {
-		return err
+func remapFields(in runtime.Object, rr rewriter.ResourceRewriter) error {
+	if rr == nil {
+		return fmt.Errorf("resource rewriter missing")
 	}
-	annotations := o.GetAnnotations()
-	if originalTime, ok := annotations[importer.AnnotationForOriginalValue("creationTimestamp")]; ok {
-		parsedTime, err := time.Parse(time.RFC3339, originalTime)
-		if err != nil {
-			return nil
-		}
-		o.SetCreationTimestamp(metav1.NewTime(parsedTime))
-		delete(annotations, importer.AnnotationForOriginalValue("creationTimestamp"))
-		log.Printf("[%s] %s/%s: resource creationTimestamp modified\n", in.GetObjectKind().GroupVersionKind(), o.GetNamespace(), o.GetName())
-	}
-	o.SetAnnotations(annotations)
 
-	return nil
+	u, ok := in.(*unstructured.Unstructured)
+	if !ok {
+		// TODO(mh):
+		return nil
+	}
+
+	return rr.BeforeServing(u)
+	// o, err := meta.Accessor(in)
+	// if err != nil {
+	// 	return err
+	// }
+	// annotations := o.GetAnnotations()
+	// if originalTime, ok := annotations[importer.AnnotationForOriginalValue("creationTimestamp")]; ok {
+	// 	parsedTime, err := time.Parse(time.RFC3339, originalTime)
+	// 	if err != nil {
+	// 		return nil
+	// 	}
+	// 	o.SetCreationTimestamp(metav1.NewTime(parsedTime))
+	// 	delete(annotations, importer.AnnotationForOriginalValue("creationTimestamp"))
+	// 	log.Printf("[%s] %s/%s: resource creationTimestamp modified\n", in.GetObjectKind().GroupVersionKind(), o.GetNamespace(), o.GetName())
+	// }
+	// o.SetAnnotations(annotations)
+
+	// return nil
 }

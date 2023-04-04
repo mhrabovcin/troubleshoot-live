@@ -28,7 +28,7 @@ import (
 
 // AnnotationForOriginalValue creates annotation key for given value.
 func AnnotationForOriginalValue(name string) string {
-	return fmt.Sprintf("support-bundle-live/%s", name)
+	return fmt.Sprintf("troubleshoot-live/%s", name)
 }
 
 // ImportBundle creates resources in provided API server.
