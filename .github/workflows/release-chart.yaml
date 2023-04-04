@@ -1,0 +1,25 @@
+name: release-chart
+
+on:
+  workflow_dispatch:
+    
+permissions:
+  contents: write
+  pages: write
+
+jobs:
+  release-chart:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+
+      - name: Install tools via asdf
+        uses: asdf-vm/actions/install@v2.1.0
+
+      - name: Publish Helm Chart
+        run: |
+          make publish-helm-chart
+          cd third-party/troubleshoot-live && git add . && git commit -m "Release Helm Chart" && git push

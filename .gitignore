@@ -19,3 +19,6 @@ dist
 
 # Generated charts
 troubleshoot-live-*.tgz
+
+# Intermediate folders
+third-party/*
