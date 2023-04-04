@@ -43,4 +43,4 @@ echo "To verify, issue: cd ${HELM_REPO_DIR} && git diff"
 echo "To release charts, commit new files and index.yaml"
 
 # Cleanup temporary directories.
-rm -rf ${TEMP_MANAGEMENT_DIR}
+rm -rf ${TEMP_DIR}
