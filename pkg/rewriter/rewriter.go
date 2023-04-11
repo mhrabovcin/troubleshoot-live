@@ -1,6 +1,7 @@
 package rewriter
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -41,7 +42,7 @@ func (r *removeField) annotationName() string {
 }
 
 func (r *removeField) BeforeImport(u *unstructured.Unstructured) error {
-	s, ok, err := unstructured.NestedString(u.Object, r.fieldPath...)
+	value, ok, err := unstructured.NestedFieldCopy(u.Object, r.fieldPath...)
 	if err != nil {
 		return err
 	}
@@ -51,7 +52,12 @@ func (r *removeField) BeforeImport(u *unstructured.Unstructured) error {
 	}
 
 	unstructured.RemoveNestedField(u.Object, r.fieldPath...)
-	return addAnnotation(u, r.annotationName(), s)
+	serialized, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+
+	return addAnnotation(u, r.annotationName(), string(serialized))
 }
 
 func (r *removeField) BeforeServing(u *unstructured.Unstructured) error {
@@ -63,7 +69,12 @@ func (r *removeField) BeforeServing(u *unstructured.Unstructured) error {
 		return nil
 	}
 
-	if err := unstructured.SetNestedField(u.Object, value, r.fieldPath...); err != nil {
+	var unserialized any
+	if err := json.Unmarshal([]byte(value), &unserialized); err != nil {
+		return err
+	}
+
+	if err := unstructured.SetNestedField(u.Object, unserialized, r.fieldPath...); err != nil {
 		return err
 	}
 	unstructured.RemoveNestedField(u.Object, "metadata", "annotations", r.annotationName())

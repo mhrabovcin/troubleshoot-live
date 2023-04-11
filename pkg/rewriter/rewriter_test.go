@@ -72,3 +72,17 @@ func TestRemoveField_SkipWithoutAnnotation(t *testing.T) {
 	pod = testRewriterBeforeServing(t, removeResourceVersion, pod)
 	assert.Equal(t, "1000", pod.GetResourceVersion())
 }
+
+func TestRemoveField_NilValue(t *testing.T) {
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{},
+	}
+	assert.Empty(t, pod.GetCreationTimestamp())
+	removeCreationTimetstamp := RemoveField("metadata", "creationTimestamp")
+	pod = testRewriterBeforeImport(t, removeCreationTimetstamp, pod)
+	assert.Contains(t, pod.GetAnnotations(), annotationForOriginalValue("metadata.creationTimestamp"))
+	assert.Equal(t, pod.GetAnnotations()[annotationForOriginalValue("metadata.creationTimestamp")], "null")
+	pod = testRewriterBeforeServing(t, removeCreationTimetstamp, pod)
+	assert.Empty(t, pod.GetCreationTimestamp())
+	assert.NotContains(t, pod.GetAnnotations(), annotationForOriginalValue("metadata.creationTimestamp"))
+}

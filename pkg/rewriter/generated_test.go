@@ -1,6 +1,7 @@
 package rewriter
 
 import (
+	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
@@ -41,7 +42,9 @@ func TestGeneratedValues(t *testing.T) {
 		fieldName := fmt.Sprintf("metadata.%s", k)
 		annotation := annotationForOriginalValue(fieldName)
 		assert.Contains(t, pod.GetAnnotations(), annotation, "annotation %q missing", fieldName)
-		assert.Equal(t, v, pod.GetAnnotations()[annotation], "wrong value stored in %q", fieldName)
+		var unserialized any
+		assert.NoError(t, json.Unmarshal([]byte(pod.GetAnnotations()[annotation]), &unserialized))
+		assert.Equal(t, v, unserialized, "wrong value stored in %q", fieldName)
 	}
 
 	pod = testRewriterBeforeServing(t, r, pod)
