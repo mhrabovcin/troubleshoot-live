@@ -21,4 +21,50 @@ The proxy server allows to define on which address is the API server available. 
 ## Installation
 
 - Download and unpack a release from the Release page.
+
+```bash
+export VERSION=v0.0.10
+export OS=linux
+export ARCH=amd64
+curl -LS "https://github.com/mhrabovcin/troubleshoot-live/releases/download/${VERSION}/troubleshoot-live_${VERSION}_${OS}_${ARCH}.tar.gz | tar -zxvf -
+chmod +x troubleshoot-live
+```
+
+[Optional] Then copy the `troubleshoot-live` binary to a directory in your `PATH`.
+
+```bash
+sudo cp ./troubleshoot-live /usr/local/bin/troubleshoot-live
+```
+
 - Use the `asdf` [plugin](https://github.com/adyatlov/asdf-troubleshoot-live).
+
+## Usage
+
+You can spin up a new API server and import resources from the support bundle using:
+
+```bash
+troubleshoot-live serve support-bundle.tar.gz
+```
+
+where:
+
+- `support-bundle.tar.gz` is the support bundle file
+- `/path/to/bundle` is the path to the extracted support bundle
+
+The output of the command should look like:
+
+```bash
+ ✓ Starting k8s server
+Processing 450 records from CRD file
+ ✓ Importing bundle resources
+Running HTTPs proxy service on: http://localhost:8080
+Kubeconfig path: ./support-bundle-kubeconfig
+```
+
+You can then use the `support-bundle-kubeconfig` file to access the API server like always with `kubectl`:
+
+```bash
+$ kubectl --kubeconfig support-bundle-kubeconfig get pods
+NAMESPACE     NAME                                       READY   STATUS    RESTARTS   AGE
+default   my-pod-66bff467f8-2j2xv                   1/1     Running   0          2m
+```
