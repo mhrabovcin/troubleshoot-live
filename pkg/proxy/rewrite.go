@@ -93,6 +93,7 @@ func readResponseBody(r *http.Response) ([]byte, error) {
 			return nil, err
 		}
 	}
+	defer r.Body.Close()
 
 	return io.ReadAll(reader)
 }
@@ -105,7 +106,6 @@ func writeResponseBody(r *http.Response, data []byte) error {
 		if err != nil {
 			return err
 		}
-
 		gzipWriter.Close()
 		data = gzipped.Bytes()
 	}
@@ -123,26 +123,9 @@ func remapFields(in runtime.Object, rr rewriter.ResourceRewriter) error {
 
 	u, ok := in.(*unstructured.Unstructured)
 	if !ok {
-		// TODO(mh):
+		// TODO(mh): handle non-unstructured objects
 		return nil
 	}
 
 	return rr.BeforeServing(u)
-	// o, err := meta.Accessor(in)
-	// if err != nil {
-	// 	return err
-	// }
-	// annotations := o.GetAnnotations()
-	// if originalTime, ok := annotations[importer.AnnotationForOriginalValue("creationTimestamp")]; ok {
-	// 	parsedTime, err := time.Parse(time.RFC3339, originalTime)
-	// 	if err != nil {
-	// 		return nil
-	// 	}
-	// 	o.SetCreationTimestamp(metav1.NewTime(parsedTime))
-	// 	delete(annotations, importer.AnnotationForOriginalValue("creationTimestamp"))
-	// 	log.Printf("[%s] %s/%s: resource creationTimestamp modified\n", in.GetObjectKind().GroupVersionKind(), o.GetNamespace(), o.GetName())
-	// }
-	// o.SetAnnotations(annotations)
-
-	// return nil
 }

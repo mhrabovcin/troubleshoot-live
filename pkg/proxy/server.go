@@ -17,7 +17,9 @@ func New(cfg *rest.Config, b bundle.Bundle, rr rewriter.ResourceRewriter) http.H
 	if err != nil {
 		log.Fatalln(err)
 	}
-	proxyHandler.ModifyResponse = proxyModifyResponse(rr)
+	// disable bodyclose linting as it seems like false positive
+	// https://github.com/timakin/bodyclose/issues/42
+	proxyHandler.ModifyResponse = proxyModifyResponse(rr) //nolint:bodyclose // false positive
 
 	r := mux.NewRouter()
 	r.Handle("/api/v1/namespaces/{namespace}/pods/{pod}/log", LogsHandler(b))

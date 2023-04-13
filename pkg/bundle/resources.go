@@ -6,13 +6,14 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/mhrabovcin/troubleshoot-live/pkg/utils"
 	"github.com/spf13/afero"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/yaml"
+
+	"github.com/mhrabovcin/troubleshoot-live/pkg/utils"
 )
 
 // LoadResourcesFromFile tries to k8s API resources from a given file. It supports
