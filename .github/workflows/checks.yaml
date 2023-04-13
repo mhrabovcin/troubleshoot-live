@@ -44,6 +44,11 @@ jobs:
           test-results: test.json
 
   lint:
+
+    permissions:
+      contents: write
+      pull-requests: write
+
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
