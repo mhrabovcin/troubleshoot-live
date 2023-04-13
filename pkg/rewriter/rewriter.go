@@ -42,12 +42,13 @@ func (r *removeField) annotationName() string {
 }
 
 func (r *removeField) BeforeImport(u *unstructured.Unstructured) error {
-	value, ok, err := unstructured.NestedFieldCopy(u.Object, r.fieldPath...)
+	value, ok, err := unstructured.NestedFieldNoCopy(u.Object, r.fieldPath...)
 	if err != nil {
 		return err
 	}
 
-	if !ok {
+	// Do not process empty `nil` values.
+	if !ok || value == nil {
 		return nil
 	}
 
