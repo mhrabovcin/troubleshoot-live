@@ -4,8 +4,9 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/mhrabovcin/troubleshoot-live/pkg/utils"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/mhrabovcin/troubleshoot-live/pkg/utils"
 )
 
 func TestMaxErrorString(t *testing.T) {

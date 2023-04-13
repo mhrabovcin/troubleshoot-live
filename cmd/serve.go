@@ -14,6 +14,7 @@ import (
 	"github.com/mhrabovcin/troubleshoot-live/pkg/importer"
 	"github.com/mhrabovcin/troubleshoot-live/pkg/kubernetes"
 	"github.com/mhrabovcin/troubleshoot-live/pkg/proxy"
+	"github.com/mhrabovcin/troubleshoot-live/pkg/rewriter"
 )
 
 type serveOptions struct {
@@ -95,7 +96,7 @@ func runServe(bundlePath string, o *serveOptions, out output.Output) error {
 	out.Infof("Running HTTPs proxy service on: %s", proxyHTTPAddress)
 	out.Infof("Kubeconfig path: %s", kubeconfigPath)
 
-	http.Handle("/", proxy.New(testEnv.Config, supportBundle))
+	http.Handle("/", proxy.New(testEnv.Config, supportBundle, rewriter.GeneratedValues()))
 	return http.ListenAndServe(o.proxyAddress, nil) //nolint:gosec // not a production server
 }
 
