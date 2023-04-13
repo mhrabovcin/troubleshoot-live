@@ -31,51 +31,7 @@ func LoadResourcesFromFile(bundle afero.Fs, path string) (*unstructured.Unstruct
 	}
 
 	if strings.HasSuffix(path, ".json") {
-		// Format:
-		// - stored as unstructured.UnstructedList and items contain GVK info
-		err := json.Unmarshal(data, list)
-		if err == nil {
-			return list, nil
-		}
-		errs := []error{err}
-
-		// Format:
-		// - no GVK info in objects
-		// [ {}, {}, ... {} ]
-		items := []map[string]any{}
-		if secondErr := json.Unmarshal(data, &items); secondErr != nil {
-			errs = append(errs, secondErr)
-		} else {
-			for _, item := range items {
-				list.Items = append(list.Items, unstructured.Unstructured{Object: item})
-			}
-			return list, nil
-		}
-
-		// Format:
-		// - similar to unstructured list but objects do not contain GVK info
-		// {
-		//	"metadata": { ... }
-		//  "items": [ {}, {}, ... {}]
-		// }
-		//
-		untypedList := struct {
-			Items []map[string]any `json:"items"`
-		}{}
-		if thirdErr := json.Unmarshal(data, &untypedList); thirdErr != nil {
-			errs = append(errs, thirdErr)
-		} else {
-			for _, item := range untypedList.Items {
-				list.Items = append(list.Items, unstructured.Unstructured{Object: item})
-			}
-			return list, nil
-		}
-
-		for i := range errs {
-			errs[i] = utils.MaxErrorString(errs[i], 200)
-		}
-
-		return nil, fmt.Errorf("failed to load resources from JSON file %q with errors: %w", path, errors.Join(errs...))
+		return parseJSONList(data, path)
 	}
 
 	if strings.HasSuffix(path, ".yaml") || strings.HasSuffix(path, ".yml") {
@@ -88,6 +44,55 @@ func LoadResourcesFromFile(bundle afero.Fs, path string) (*unstructured.Unstruct
 	}
 
 	return nil, fmt.Errorf("unsupported data format")
+}
+
+func parseJSONList(data []byte, path string) (*unstructured.UnstructuredList, error) {
+	list := &unstructured.UnstructuredList{}
+	// Format:
+	// - stored as unstructured.UnstructedList and items contain GVK info
+	err := json.Unmarshal(data, list)
+	if err == nil {
+		return list, nil
+	}
+	errs := []error{err}
+
+	// Format:
+	// - no GVK info in objects
+	// [ {}, {}, ... {} ]
+	items := []map[string]any{}
+	if secondErr := json.Unmarshal(data, &items); secondErr != nil {
+		errs = append(errs, secondErr)
+	} else {
+		for _, item := range items {
+			list.Items = append(list.Items, unstructured.Unstructured{Object: item})
+		}
+		return list, nil
+	}
+
+	// Format:
+	// - similar to unstructured list but objects do not contain GVK info
+	// {
+	//	"metadata": { ... }
+	//  "items": [ {}, {}, ... {}]
+	// }
+	//
+	untypedList := struct {
+		Items []map[string]any `json:"items"`
+	}{}
+	if thirdErr := json.Unmarshal(data, &untypedList); thirdErr != nil {
+		errs = append(errs, thirdErr)
+	} else {
+		for _, item := range untypedList.Items {
+			list.Items = append(list.Items, unstructured.Unstructured{Object: item})
+		}
+		return list, nil
+	}
+
+	for i := range errs {
+		errs[i] = utils.MaxErrorString(errs[i], 200)
+	}
+
+	return nil, fmt.Errorf("failed to load resources from JSON file %q with errors: %w", path, errors.Join(errs...))
 }
 
 // cmOrSecret represents a special data structure that troubleshoot uses for
