@@ -16,3 +16,4 @@
 
 *-kubeconfig
 dist
+unit-tests.xml
