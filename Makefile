@@ -4,8 +4,9 @@ export DOCKERHUB_ORG ?= mhrabovcin
 export GIT_TREE_STATE ?=
 
 .PHONY: test
-test:
-	go test ./...
+test: tools.gotestsum
+	gotestsum --format pkgname --junitfile unit-tests.xml -- -coverprofile=cover.out ./... && \
+		go tool cover -func=cover.out
 
 .PHONY: lint
 lint:
@@ -44,3 +45,7 @@ release-snapshot:
 		--clean \
 		--parallelism=$(GORELEASER_PARALLELISM) \
 		--timeout=60m
+
+.PHONY: tools.gotestsum
+tools.gotestsum:
+	go install gotest.tools/gotestsum@v1.10.0
