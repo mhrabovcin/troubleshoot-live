@@ -5,7 +5,7 @@ export GIT_TREE_STATE ?=
 
 .PHONY: test
 test: tools.gotestsum
-	gotestsum --format pkgname --junitfile unit-tests.xml -- -coverprofile=cover.out ./... && \
+	gotestsum --format pkgname --junitfile unit-tests.xml --jsonfile test.json -- -coverprofile=cover.out ./... && \
 		go tool cover -func=cover.out
 
 .PHONY: lint
