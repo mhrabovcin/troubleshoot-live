@@ -96,7 +96,7 @@ func runServe(bundlePath string, o *serveOptions, out output.Output) error {
 	out.Infof("Running HTTPs proxy service on: %s", proxyHTTPAddress)
 	out.Infof("Kubeconfig path: %s", kubeconfigPath)
 
-	http.Handle("/", proxy.New(testEnv.Config, supportBundle, rewriter.GeneratedValues()))
+	http.Handle("/", proxy.New(testEnv.Config, supportBundle, rewriter.Default()))
 	return http.ListenAndServe(o.proxyAddress, nil) //nolint:gosec // not a production server
 }
 

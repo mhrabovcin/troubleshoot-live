@@ -13,6 +13,10 @@ func annotationForOriginalValue(name string) string {
 	return fmt.Sprintf("troubleshoot-live/%s", name)
 }
 
+func annotationForField(fieldPath ...string) string {
+	return annotationForOriginalValue(strings.Join(fieldPath, "."))
+}
+
 // ResourceRewriter prepares object for saving on import and rewrites the object
 // before its returned back from proxy server.
 type ResourceRewriter interface {
@@ -38,7 +42,7 @@ type removeField struct {
 }
 
 func (r *removeField) annotationName() string {
-	return annotationForOriginalValue(strings.Join(r.fieldPath, "."))
+	return annotationForField(r.fieldPath...)
 }
 
 func (r *removeField) BeforeImport(u *unstructured.Unstructured) error {
