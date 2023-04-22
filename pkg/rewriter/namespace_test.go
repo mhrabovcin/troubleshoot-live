@@ -14,7 +14,7 @@ func TestDeletedNamespace_ReplaceStatus(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test",
 			DeletionTimestamp: &metav1.Time{
-				time.Now().Add(-1 * time.Second),
+				Time: time.Now().Add(-1 * time.Second),
 			},
 		},
 		Status: corev1.NamespaceStatus{
