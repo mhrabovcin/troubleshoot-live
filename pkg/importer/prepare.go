@@ -10,7 +10,7 @@ import (
 // that can be imported.
 func prepareForImport(in any) error {
 	// TODO(mh): inject
-	rr := rewriter.GeneratedValues()
+	rr := rewriter.Default()
 
 	u, ok := in.(*unstructured.Unstructured)
 	if !ok {
