@@ -27,7 +27,12 @@ func WriteProxyKubeconfig(host, path string) (string, error) {
 		return "", err
 	}
 
-	return path, nil
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+
+	return absPath, nil
 }
 
 func restConfigToKubeconfig(rc *rest.Config, path string) error {
