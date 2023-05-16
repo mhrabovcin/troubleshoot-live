@@ -4,8 +4,12 @@ export DOCKER_REGISTRY ?= ghcr.io
 export DOCKERHUB_ORG ?= mhrabovcin
 export GIT_TREE_STATE ?=
 
+.PHONY: gogenerate
+gogenerate:
+	go generate ./...
+
 .PHONY: test
-test: tools.gotestsum
+test: tools.gotestsum gogenerate
 	gotestsum --format pkgname --junitfile unit-tests.xml --jsonfile test.json -- -coverprofile=cover.out ./... && \
 		go tool cover -func=cover.out
 
