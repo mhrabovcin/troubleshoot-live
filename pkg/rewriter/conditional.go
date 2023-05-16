@@ -12,7 +12,7 @@ type conditionalRewriter struct {
 
 var _ ResourceRewriter = (*conditionalRewriter)(nil)
 
-// When executes provided rewriter only if condition matches
+// When executes provided rewriter only if condition matches.
 func When(condition Condition, rewriter ResourceRewriter) ResourceRewriter {
 	return &conditionalRewriter{
 		rewriter:  rewriter,
@@ -37,7 +37,7 @@ func (r *conditionalRewriter) BeforeServing(u *unstructured.Unstructured) error 
 // Condition is function that returns bool with condition match result.
 type Condition func(*unstructured.Unstructured) bool
 
-// MatchGVK checks if resource matches given GroupVersionKind
+// MatchGVK checks if resource matches given GroupVersionKind.
 func MatchGVK(gvk schema.GroupVersionKind) Condition {
 	return func(u *unstructured.Unstructured) bool {
 		apiVersion, kind := gvk.ToAPIVersionAndKind()
