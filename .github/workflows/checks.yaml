@@ -36,6 +36,10 @@ jobs:
 
       - name: Run unit tests
         run: make test
+        env:
+          # This env variable is set automatically by endorama/asdf-parse-tool-versions
+          # and mockery is picking it up.
+          MOCKERY_VERSION: ""
 
       - name: Annotate tests
         if: always()
