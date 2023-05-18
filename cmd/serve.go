@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"runtime"
 
+	"github.com/gorilla/handlers"
+
 	"github.com/mesosphere/dkp-cli-runtime/core/output"
 	"github.com/spf13/cobra"
 
@@ -96,7 +98,10 @@ func runServe(bundlePath string, o *serveOptions, out output.Output) error {
 	out.Infof("Running HTTPs proxy service on: %s", proxyHTTPAddress)
 	out.Infof("KUBECONFIG=%s", kubeconfigPath)
 
-	http.Handle("/", proxy.New(testEnv.Config, supportBundle, rewriter.Default()))
+	proxyHandler := proxy.New(testEnv.Config, supportBundle, rewriter.Default())
+	loggedProxyHandler := handlers.LoggingHandler(out.InfoWriter(), proxyHandler)
+
+	http.Handle("/", loggedProxyHandler)
 	return http.ListenAndServe(o.proxyAddress, nil) //nolint:gosec // not a production server
 }
 

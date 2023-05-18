@@ -5,6 +5,7 @@ go 1.20
 require (
 	github.com/Masterminds/semver/v3 v3.2.0
 	github.com/go-logr/logr v1.2.3
+	github.com/gorilla/handlers v1.5.1
 	github.com/gorilla/mux v1.8.0
 	github.com/mesosphere/dkp-cli-runtime/core v0.7.1
 	github.com/mholt/archiver/v3 v3.5.1
@@ -27,6 +28,7 @@ require (
 	github.com/dsnet/compress v0.0.2-0.20210315054119-f66993602bf5 // indirect
 	github.com/emicklei/go-restful/v3 v3.9.0 // indirect
 	github.com/evanphx/json-patch/v5 v5.6.0 // indirect
+	github.com/felixge/httpsnoop v1.0.3 // indirect
 	github.com/go-openapi/jsonpointer v0.19.5 // indirect
 	github.com/go-openapi/jsonreference v0.20.0 // indirect
 	github.com/go-openapi/swag v0.19.14 // indirect
