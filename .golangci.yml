@@ -103,3 +103,8 @@ issues:
   include:
     - EXC0012
     - EXC0014
+  exclude-rules:
+    # Exclude some linters from running on tests files.
+    - path: _test\.go
+      linters:
+        - gochecknoglobals

@@ -17,6 +17,8 @@ func annotationForField(fieldPath ...string) string {
 	return annotationForOriginalValue(strings.Join(fieldPath, "."))
 }
 
+//go:generate mockery --name ResourceRewriter --with-expecter
+
 // ResourceRewriter prepares object for saving on import and rewrites the object
 // before its returned back from proxy server.
 type ResourceRewriter interface {
