@@ -26,7 +26,7 @@ The proxy server allows to define on which address is the API server available. 
 export VERSION=v0.0.10
 export OS=linux
 export ARCH=amd64
-curl -LS "https://github.com/mhrabovcin/troubleshoot-live/releases/download/${VERSION}/troubleshoot-live_${VERSION}_${OS}_${ARCH}.tar.gz | tar -zxvf -
+curl -LS "https://github.com/mhrabovcin/troubleshoot-live/releases/download/${VERSION}/troubleshoot-live_${VERSION}_${OS}_${ARCH}.tar.gz" | tar -zxvf -
 chmod +x troubleshoot-live
 ```
 
