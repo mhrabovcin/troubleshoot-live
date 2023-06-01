@@ -5,6 +5,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 var _ ResourceRewriter = (*deletedNamespace)(nil)
@@ -21,12 +22,8 @@ type deletedNamespace struct{}
 
 func (deletedNamespace) BeforeImport(u *unstructured.Unstructured) error {
 	// Only process Namespace kinds
-	if u.GetKind() != "Namespace" && u.GetAPIVersion() != "" {
-		return nil
-	}
-
-	// Only deleted namespaces could be in Terminating phase
-	if u.GetDeletionTimestamp() == nil {
+	isNamespaceKind := MatchGVK(schema.FromAPIVersionAndKind("v1", "Namespace"))
+	if !isNamespaceKind(u) {
 		return nil
 	}
 

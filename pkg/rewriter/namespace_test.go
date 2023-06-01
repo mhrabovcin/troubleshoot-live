@@ -11,6 +11,10 @@ import (
 
 func TestDeletedNamespace_ReplaceStatus(t *testing.T) {
 	ns := &corev1.Namespace{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Namespace",
+			APIVersion: "v1",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test",
 			DeletionTimestamp: &metav1.Time{
@@ -36,6 +40,10 @@ func TestDeletedNamespace_ReplaceStatus(t *testing.T) {
 
 func TestDeletedNamespace_Active(t *testing.T) {
 	ns := &corev1.Namespace{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Namespace",
+			APIVersion: "v1",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test",
 		},
