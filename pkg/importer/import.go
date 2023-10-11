@@ -2,6 +2,7 @@ package importer
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"path/filepath"
@@ -58,10 +59,17 @@ func ImportBundle(ctx context.Context, b bundle.Bundle, restCfg *rest.Config, ou
 		importSecrets,
 	}
 
+	var importErrors []error
 	for _, importerFn := range importers {
 		if err := importerFn(ctx, cfg); err != nil {
-			return err
+			importErrors = append(importErrors, err)
 		}
+	}
+
+	if len(importErrors) > 0 {
+		out.Warn("\n!!! There were failures when importing the bundle data.")
+		out.Warn("!!! The data in the API server are most likely incomplete\n")
+		return errors.Join(importErrors...)
 	}
 
 	return nil
