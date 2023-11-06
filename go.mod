@@ -10,7 +10,7 @@ require (
 	github.com/mesosphere/dkp-cli-runtime/core v0.7.3
 	github.com/mholt/archiver/v3 v3.5.1
 	github.com/spf13/afero v1.10.0
-	github.com/spf13/cobra v1.7.0
+	github.com/spf13/cobra v1.8.0
 	github.com/stretchr/testify v1.8.4
 	k8s.io/api v0.28.3
 	k8s.io/apiextensions-apiserver v0.28.3
@@ -23,7 +23,7 @@ require (
 
 require (
 	github.com/andybalholm/brotli v1.0.5 // indirect
-	github.com/cpuguy83/go-md2man/v2 v2.0.2 // indirect
+	github.com/cpuguy83/go-md2man/v2 v2.0.3 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dsnet/compress v0.0.2-0.20210315054119-f66993602bf5 // indirect
 	github.com/emicklei/go-restful/v3 v3.11.0 // indirect
