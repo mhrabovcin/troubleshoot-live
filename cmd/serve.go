@@ -142,10 +142,14 @@ func startK8sServer(
 	return testEnv, nil
 }
 
-func resolveServiceClusterIPRange(ipRangeFlag string, supportBundle bundle.Bundle, out output.Output) (string, error) {
+func resolveServiceClusterIPRange(
+	ipRangeFromFlag string,
+	supportBundle bundle.Bundle,
+	out output.Output,
+) (string, error) {
 	// Manually provided via CLI flag
-	if ipRangeFlag != "" {
-		return ipRangeFlag, nil
+	if ipRangeFromFlag != "" {
+		return ipRangeFromFlag, nil
 	}
 
 	// Detected from the bundle
