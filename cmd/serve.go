@@ -20,9 +20,10 @@ import (
 )
 
 type serveOptions struct {
-	kubeconfigPath string
-	proxyAddress   string
-	envtestArch    string
+	kubeconfigPath        string
+	proxyAddress          string
+	envtestArch           string
+	serviceClusterIPRange string
 }
 
 // NewServeCommand serves the provided bundle.
@@ -56,6 +57,11 @@ func NewServeCommand(out output.Output) *cobra.Command {
 	cmd.Flags().StringVar(
 		&options.envtestArch, "envtest-arch", options.envtestArch,
 		"arch value for k8s server assets",
+	)
+
+	cmd.Flags().StringVar(
+		&options.serviceClusterIPRange, "service-cluster-ip-range", options.serviceClusterIPRange,
+		"override k8s api server service ClusterIP range. Mask must be >= /12 range.",
 	)
 
 	return cmd
@@ -115,18 +121,49 @@ func startK8sServer(
 	if err != nil {
 		return nil, fmt.Errorf("failed to prepare k8s environment: %w", err)
 	}
-	ipRange, err := bundle.DetectServiceSubnetRange(supportBundle)
+
+	testEnv.ControlPlane.GetAPIServer().Out = out.V(5).InfoWriter()
+	testEnv.ControlPlane.GetAPIServer().Err = out.V(5).InfoWriter()
+
+	serviceClusterIPRange, err := resolveServiceClusterIPRange(
+		opts.serviceClusterIPRange, supportBundle, out)
 	if err != nil {
 		return nil, err
 	}
-	if ipRange != "" {
-		out.V(1).Infof("Detected k8s service cluster IP range: %s", ipRange)
-		testEnv.ControlPlane.GetAPIServer().Configure().Append("service-cluster-ip-range", ipRange)
+	if serviceClusterIPRange != "" {
+		testEnv.ControlPlane.GetAPIServer().Configure().Append("service-cluster-ip-range", serviceClusterIPRange)
 	}
+
 	_, err = testEnv.Start()
 	if err != nil {
 		return nil, err
 	}
 
 	return testEnv, nil
+}
+
+func resolveServiceClusterIPRange(ipRangeFlag string, supportBundle bundle.Bundle, out output.Output) (string, error) {
+	// Manually provided via CLI flag
+	if ipRangeFlag != "" {
+		return ipRangeFlag, nil
+	}
+
+	// Detected from the bundle
+	ipRangeFromBundle, err := bundle.DetectServiceSubnetRange(supportBundle)
+	if err != nil {
+		return "", err
+	}
+	if ipRangeFromBundle != "" {
+		out.V(1).Infof("Detected service cluster IP range: %s", ipRangeFromBundle)
+		return ipRangeFromBundle, nil
+	}
+
+	// Fallback default
+	out.Warnf(
+		"Service ClusterIP range could not be detected from support bundle, using default %q. Use "+
+			"%q flag to override this value.",
+		kubernetes.DefaultServiceClusterIPRange,
+		"service-cluster-ip-range",
+	)
+	return kubernetes.DefaultServiceClusterIPRange, nil
 }
