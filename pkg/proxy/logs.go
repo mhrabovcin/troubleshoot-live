@@ -20,15 +20,35 @@ func LogsHandler(b bundle.Bundle, l *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		vars := mux.Vars(r)
 
+		podLogsPath := ""
+
+		// Search for pod logs path in the bundle which could be collected either by the
+		// pod logs collector or by the cluster resources collector, which collects pod logs
+		// for failing pods.
 		filename := fmt.Sprintf("%s-%s.log", vars["pod"], r.URL.Query().Get("container"))
-		podLogsPath := filepath.Join(b.Layout().PodLogs(), vars["namespace"], filename)
+		candidatePaths := []string{
+			filepath.Join(b.Layout().PodLogs(), vars["namespace"], filename),
+			filepath.Join(b.Layout().ClusterResources(), "pods/logs", vars["namespace"], vars["pod"], r.URL.Query().Get("container")+".log"),
+		}
+		for _, candidatePath := range candidatePaths {
+			if exists, _ := afero.Exists(b, candidatePath); exists {
+				podLogsPath = candidatePath
+				break
+			}
+		}
+
+		if podLogsPath == "" {
+			http.Error(w, "pod logs not found in the bundle", http.StatusInternalServerError)
+			return
+		}
+
 		data, err := afero.ReadFile(b, podLogsPath)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		l = l.With("url", r.URL, "logs source", podLogsPath)
+		l := l.With("url", r.URL, "logs source", podLogsPath)
 
 		// By default the `k9s` requests logs prefixed with timestamp and in the logs pane
 		// only displays a portion without the timestamp, by cutting prefix separated by first
