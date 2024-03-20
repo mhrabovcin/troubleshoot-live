@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"log"
+	"log/slog"
 	"net/http"
 
 	"github.com/gorilla/mux"
@@ -22,7 +23,7 @@ func New(cfg *rest.Config, b bundle.Bundle, rr rewriter.ResourceRewriter) http.H
 	proxyHandler.ModifyResponse = proxyModifyResponse(rr) //nolint:bodyclose // false positive
 
 	r := mux.NewRouter()
-	r.Handle("/api/v1/namespaces/{namespace}/pods/{pod}/log", LogsHandler(b))
+	r.Handle("/api/v1/namespaces/{namespace}/pods/{pod}/log", LogsHandler(b, slog.With("handler", "LogsHandler")))
 	r.PathPrefix("/").Handler(proxyHandler)
 	return r
 }

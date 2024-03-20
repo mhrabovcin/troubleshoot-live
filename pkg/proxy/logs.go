@@ -1,10 +1,13 @@
 package proxy
 
 import (
+	"bytes"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"path/filepath"
+	"regexp"
+	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/spf13/afero"
@@ -13,7 +16,7 @@ import (
 )
 
 // LogsHandler serves logs for k8s `logs` subresource from the provided bundle.
-func LogsHandler(b bundle.Bundle) http.HandlerFunc {
+func LogsHandler(b bundle.Bundle, l *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		vars := mux.Vars(r)
 
@@ -25,10 +28,30 @@ func LogsHandler(b bundle.Bundle) http.HandlerFunc {
 			return
 		}
 
-		// TODO(mh): inject logger
-		log.Printf("LogsHandler: %s served from %q\n", r.URL, podLogsPath)
+		l = l.With("url", r.URL, "logs source", podLogsPath)
+
+		// By default the `k9s` requests logs prefixed with timestamp and in the logs pane
+		// only displays a portion without the timestamp, by cutting prefix separated by first
+		// space byte(' '). The troubleshoot.sh requests logs without timestamps, which causes
+		// issues in the logs pane and for some pods the logs are cut from beginnging.
+		// This will backfill zeroed timestamp for each line.
+		if r.URL.Query().Get("timestamps") == "true" {
+			lines := bytes.Split(data, []byte("\n"))
+			timestampPrefixRegexp := regexp.MustCompile(`^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{6})?Z `)
+			if !timestampPrefixRegexp.Match(lines[0]) {
+				l.Debug("adding timestamp prefix to logs")
+				zeroTime := []byte(time.UnixMicro(0).Format(time.RFC3339Nano))
+				// Add prefix to each line.
+				for i := range lines {
+					lines[i] = bytes.Join([][]byte{zeroTime, lines[i]}, []byte{' '})
+				}
+				data = bytes.Join(lines, []byte("\n"))
+			}
+		}
+
+		l.Debug("serving logs")
 		if _, err := w.Write(data); err != nil {
-			log.Printf("LogsHandler: failed to write response data: %s", err)
+			slog.Error("failed to write response data", "err", err)
 		}
 	}
 }
