@@ -30,9 +30,9 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: ${{ fromJson(steps.versions.outputs.tools).golang }}
           check-latest: false
           cache: true
+          go-version-file: 'go.mod'
 
       - name: Run unit tests
         run: make test
@@ -82,9 +82,9 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: ${{ fromJson(steps.versions.outputs.tools).golang }}
           check-latest: false
           cache: true
+          go-version-file: 'go.mod'
 
       # - uses: mfinelli/setup-shfmt@v2
       #   with:
