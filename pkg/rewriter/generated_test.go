@@ -55,7 +55,7 @@ func TestGeneratedValues(t *testing.T) {
 	assert.Equal(t, "generated-", pod.GetGenerateName())
 	assert.Equal(t, timestamp.Format(time.RFC3339), pod.GetCreationTimestamp().In(time.UTC).Format(time.RFC3339))
 	assert.Equal(t, timestamp.Format(time.RFC3339), pod.GetDeletionTimestamp().In(time.UTC).Format(time.RFC3339))
-	assert.Equal(t, int64(30), ptr.Deref(pod.GetDeletionGracePeriodSeconds(), 0))
+	assert.EqualValues(t, 30, pod.GetDeletionGracePeriodSeconds())
 	assert.Equal(t, types.UID("1000"), pod.GetUID())
 	assert.Equal(t, "2000", pod.GetResourceVersion())
 }
