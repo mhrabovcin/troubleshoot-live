@@ -7,6 +7,7 @@ func GeneratedValues() ResourceRewriter {
 		RemoveField("metadata", "generateName"),
 		RemoveField("metadata", "creationTimestamp"),
 		RemoveField("metadata", "deletionTimestamp"),
+		RemoveField("metadata", "deletionGracePeriodSeconds"),
 		RemoveField("metadata", "uid"),
 		RemoveField("metadata", "resourceVersion"),
 	)
