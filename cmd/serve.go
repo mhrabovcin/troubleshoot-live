@@ -24,6 +24,7 @@ type serveOptions struct {
 	proxyAddress          string
 	envtestArch           string
 	serviceClusterIPRange string
+	serviceNodePortRange  string
 }
 
 // NewServeCommand serves the provided bundle.
@@ -62,6 +63,11 @@ func NewServeCommand(out output.Output) *cobra.Command {
 	cmd.Flags().StringVar(
 		&options.serviceClusterIPRange, "service-cluster-ip-range", options.serviceClusterIPRange,
 		"override k8s api server service ClusterIP range. Mask must be >= /12 range.",
+	)
+
+	cmd.Flags().StringVar(
+		&options.serviceNodePortRange, "service-node-port-range", options.serviceNodePortRange,
+		"override k8s api server service node port range",
 	)
 
 	return cmd
@@ -134,12 +140,51 @@ func startK8sServer(
 		testEnv.ControlPlane.GetAPIServer().Configure().Append("service-cluster-ip-range", serviceClusterIPRange)
 	}
 
+	serviceNodePortRange, err := resolveServiceNodePortRange(
+		opts.serviceNodePortRange, supportBundle, out)
+	if err != nil {
+		return nil, err
+	}
+	if serviceNodePortRange != "" {
+		testEnv.ControlPlane.GetAPIServer().Configure().Append("service-node-port-range", serviceNodePortRange)
+	}
+
 	_, err = testEnv.Start()
 	if err != nil {
 		return nil, err
 	}
 
 	return testEnv, nil
+}
+
+func resolveServiceNodePortRange(
+	nodePortRangeFromFlag string,
+	supportBundle bundle.Bundle,
+	out output.Output,
+) (string, error) {
+	// Manually provided via CLI flag
+	if nodePortRangeFromFlag != "" {
+		return nodePortRangeFromFlag, nil
+	}
+
+	// Detected from the bundle
+	nodePortRangeFromBundle, err := bundle.DetectServiceNodePortRange(supportBundle)
+	if err != nil {
+		return "", err
+	}
+	if nodePortRangeFromBundle != "" {
+		out.V(1).Infof("Detected service node port range: %s", nodePortRangeFromBundle)
+		return nodePortRangeFromBundle, nil
+	}
+
+	// Fallback default
+	out.Warnf(
+		"Service node port range could not be detected from support bundle, using default %q. Use "+
+			"%q flag to override this value.",
+		kubernetes.DefaultServiceNodePortRange,
+		"service-node-port-range",
+	)
+	return kubernetes.DefaultServiceNodePortRange, nil
 }
 
 func resolveServiceClusterIPRange(
