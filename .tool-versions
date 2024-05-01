@@ -1,6 +1,6 @@
 helm 3.10.0
-golang 1.21.8
-golangci-lint 1.51.2
+golang 1.22.2
+golangci-lint 1.57.2
 pre-commit 3.1.1
 goreleaser 1.16.1
 mockery 2.27.1
