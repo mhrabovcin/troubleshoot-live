@@ -2,9 +2,13 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
+	"os/signal"
 	"runtime"
+	"syscall"
+	"time"
 
 	"github.com/gorilla/handlers"
 
@@ -79,7 +83,8 @@ func runServe(bundlePath string, o *serveOptions, out output.Output) error {
 		return fmt.Errorf("failed to get bundle from path %q: %w", bundlePath, err)
 	}
 
-	ctx := context.Background()
+	ctx, done := signal.NotifyContext(context.Background(), syscall.SIGINT)
+	defer done()
 
 	out.StartOperation("Starting k8s server")
 	testEnv, err := startK8sServer(ctx, supportBundle, out, o)
@@ -113,8 +118,26 @@ func runServe(bundlePath string, o *serveOptions, out output.Output) error {
 	proxyHandler := proxy.New(testEnv.Config, supportBundle, rewriter.Default())
 	loggedProxyHandler := handlers.LoggingHandler(out.InfoWriter(), proxyHandler)
 
-	http.Handle("/", loggedProxyHandler)
-	return http.ListenAndServe(o.proxyAddress, nil) //nolint:gosec // not a production server
+	s := http.Server{
+		Addr:              o.proxyAddress,
+		Handler:           loggedProxyHandler,
+		ReadHeaderTimeout: time.Second * 5,
+	}
+	go func() {
+		<-ctx.Done()
+		out.Info("Shutting down troubleshoot-live...")
+		if err := s.Shutdown(ctx); err != nil {
+			out.Error(err, "failed to shutdown http server")
+		}
+	}()
+	return ignoreServerClosedError(s.ListenAndServe())
+}
+
+func ignoreServerClosedError(err error) error {
+	if errors.Is(err, http.ErrServerClosed) {
+		return nil
+	}
+	return err
 }
 
 func startK8sServer(
