@@ -68,3 +68,9 @@ $ kubectl --kubeconfig support-bundle-kubeconfig get pods
 NAMESPACE     NAME                                       READY   STATUS    RESTARTS   AGE
 default   my-pod-66bff467f8-2j2xv                   1/1     Running   0          2m
 ```
+
+## Known issues
+
+### `etcd` process is crashing
+
+The OS level resource limits (like `ulimit`) might need to be increased to allow the API server and `etcd` to start. The `etcd` process is using a lot of file descriptors and might hit the open files limit. The `etcd` process logs can be printed by running `troubleshoot-live` with `KUBEBUILDER_ATTACH_CONTROL_PLANE_OUTPUT=true` environment variable.
