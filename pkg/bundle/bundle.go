@@ -1,13 +1,15 @@
 package bundle
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/mholt/archiver/v3"
+	"github.com/mholt/archives"
 	"github.com/spf13/afero"
 )
 
@@ -61,7 +63,7 @@ func New(path string) (Bundle, error) {
 
 		if len(existingDirItems) == 0 {
 			log.Printf("Extracting support bundle from %q to %q ...", path, tmpDir)
-			if err := unarchiveToDirectory(path, tmpDir); err != nil {
+			if err := unarchiveToDirectory(context.TODO(), path, tmpDir); err != nil {
 				return nil, err
 			}
 		} else {
@@ -104,29 +106,51 @@ func FromFs(fs afero.Fs) Bundle {
 	return bundle{fs}
 }
 
-func unarchiveToDirectory(archive, destDir string) error {
-	archiverByExtension, err := archiver.ByExtension(archive)
+func unarchiveToDirectory(ctx context.Context, archive, destDir string) error {
+	sourceArchive, err := os.Open(archive)
 	if err != nil {
-		return fmt.Errorf("failed to identify archive format: %w", err)
+		return fmt.Errorf("failed to open archive: %w", err)
+	}
+	defer sourceArchive.Close()
+
+	format, reader, err := archives.Identify(ctx, archive, sourceArchive)
+	if err != nil {
+		return fmt.Errorf("failed to identify archive: %w", err)
 	}
 
-	unarc, ok := archiverByExtension.(archiver.Unarchiver)
-	if !ok {
-		return fmt.Errorf("not an valid archive extension")
+	if ex, ok := format.(archives.Extractor); ok {
+		return ex.Extract(ctx, reader, func(ctx context.Context, info archives.FileInfo) error {
+			if info.IsDir() {
+				if err := os.MkdirAll(filepath.Join(destDir, info.Name()), 0o755); err != nil {
+					return err
+				}
+				return nil
+			}
+
+			baseDir := filepath.Dir(info.NameInArchive)
+			if err := os.MkdirAll(filepath.Join(destDir, baseDir), 0o755); err != nil {
+				return err
+			}
+
+			src, err := info.Open()
+			if err != nil {
+				return fmt.Errorf("failed to open file %q: %w", info.Name(), err)
+			}
+			defer src.Close()
+
+			dstPath := filepath.Join(destDir, baseDir, info.Name())
+			dst, err := os.Create(dstPath)
+			if err != nil {
+				return fmt.Errorf("failed to create file %q: %w", dstPath, err)
+			}
+			defer dst.Close()
+
+			_, err = io.Copy(dst, src)
+			return err
+		})
 	}
 
-	switch t := unarc.(type) {
-	case *archiver.TarGz:
-		t.OverwriteExisting = true
-	case *archiver.Tar:
-		t.OverwriteExisting = true
-	}
-
-	if err := unarc.Unarchive(archive, destDir); err != nil {
-		return fmt.Errorf("failed to unarchive bundle: %w", err)
-	}
-
-	return nil
+	return fmt.Errorf("unsupported archive format")
 }
 
 func fromDir(path string) afero.Fs {
