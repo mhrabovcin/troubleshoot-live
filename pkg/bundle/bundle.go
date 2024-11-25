@@ -119,14 +119,7 @@ func unarchiveToDirectory(ctx context.Context, archive, destDir string) error {
 	}
 
 	if ex, ok := format.(archives.Extractor); ok {
-		return ex.Extract(ctx, reader, func(ctx context.Context, info archives.FileInfo) error {
-			if info.IsDir() {
-				if err := os.MkdirAll(filepath.Join(destDir, info.Name()), 0o755); err != nil {
-					return err
-				}
-				return nil
-			}
-
+		return ex.Extract(ctx, reader, func(_ context.Context, info archives.FileInfo) error {
 			baseDir := filepath.Dir(info.NameInArchive)
 			if err := os.MkdirAll(filepath.Join(destDir, baseDir), 0o755); err != nil {
 				return err

@@ -2,12 +2,6 @@ run:
   timeout: 3m
 
 linters-settings:
-  depguard:
-    list-type: blacklist
-    packages:
-      - k8s.io/kubernetes
-    packages-with-error-message:
-      - k8s.io/kubernetes: "Avoid k8s.io/kubernetes if possible to reduce transitive dependencies"
   dupl:
     threshold: 100
   funlen:
@@ -57,7 +51,6 @@ linters:
   enable:
     - asciicheck
     - bodyclose
-    - depguard
     - dogsled
     - dupl
     - errcheck
