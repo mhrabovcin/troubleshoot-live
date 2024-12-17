@@ -87,10 +87,8 @@ func createEnvtest(ctx context.Context, serverVersion versions.Spec) (*env.Env, 
 	return &env.Env{
 		Log:     logger,
 		Version: serverVersion,
-		Client: &remote.Client{
-			Log:    logger.WithName("envtest-client"),
-			Bucket: "kubebuilder-tools",
-			Server: "storage.googleapis.com",
+		Client: &remote.HTTPClient{
+			Log: logger.WithName("envtest-client"),
 		},
 		VerifySum:     false, // todo: expose?
 		ForceDownload: false, // todo: expose?
