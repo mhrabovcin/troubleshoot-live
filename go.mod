@@ -10,7 +10,7 @@ require (
 	github.com/gorilla/handlers v1.5.2
 	github.com/gorilla/mux v1.8.1
 	github.com/mesosphere/dkp-cli-runtime/core v0.7.3
-	github.com/mholt/archives v0.0.0-20241121231447-a7daedac0a9e
+	github.com/mholt/archives v0.1.0
 	github.com/spf13/afero v1.11.0
 	github.com/spf13/cobra v1.8.1
 	github.com/stretchr/testify v1.10.0
