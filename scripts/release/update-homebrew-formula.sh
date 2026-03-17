@@ -1,22 +1,22 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ -z "${TAG_NAME:-}" ]]; then
+if [[ -z ${TAG_NAME:-} ]]; then
   echo "TAG_NAME is required (example: v0.1.0)"
   exit 1
 fi
 
-if [[ -z "${SOURCE_REPOSITORY:-}" ]]; then
+if [[ -z ${SOURCE_REPOSITORY:-} ]]; then
   echo "SOURCE_REPOSITORY is required (example: mhrabovcin/troubleshoot-live)"
   exit 1
 fi
 
-if [[ -z "${TAP_DIR:-}" ]]; then
+if [[ -z ${TAP_DIR:-} ]]; then
   echo "TAP_DIR is required"
   exit 1
 fi
 
-if [[ -z "${GITHUB_TOKEN:-}" ]]; then
+if [[ -z ${GITHUB_TOKEN:-} ]]; then
   echo "GITHUB_TOKEN is required"
   exit 1
 fi
@@ -33,10 +33,10 @@ trap cleanup EXIT
 curl -fsSL \
   -H "Authorization: Bearer ${GITHUB_TOKEN}" \
   -H "Accept: application/vnd.github+json" \
-  "${api_url}" > "${release_json}"
+  "${api_url}" >"${release_json}"
 
 checksums_url="$(jq -r '.assets[] | select(.name == "checksums.txt") | .browser_download_url' "${release_json}")"
-if [[ -z "${checksums_url}" || "${checksums_url}" == "null" ]]; then
+if [[ -z ${checksums_url} || ${checksums_url} == "null" ]]; then
   echo "Unable to find checksums.txt in release ${TAG_NAME}"
   exit 1
 fi
@@ -55,7 +55,7 @@ sha_for() {
   local value
   value="$(awk -v f="${filename}" '$2 == f { print $1 }' "${checksums_txt}")"
 
-  if [[ -z "${value}" ]]; then
+  if [[ -z ${value} ]]; then
     echo "Missing checksum for ${filename}"
     exit 1
   fi
@@ -71,7 +71,7 @@ linux_arm64="troubleshoot-live_v${version}_linux_arm64.tar.gz"
 formula_path="${TAP_DIR}/Formula/troubleshoot-live.rb"
 mkdir -p "$(dirname "${formula_path}")"
 
-cat > "${formula_path}" <<FORMULA
+cat >"${formula_path}" <<FORMULA
 class TroubleshootLive < Formula
   desc "Expose support bundle resources via a local Kubernetes API server"
   homepage "https://github.com/${SOURCE_REPOSITORY}"
