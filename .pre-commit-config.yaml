@@ -1,9 +1,15 @@
 repos:
 - repo: local
   hooks:
+  - id: helm-lint
+    name: helm-lint
+    entry: helm lint --strict ./charts/troubleshoot-live
+    language: system
+    files: "^charts/"
+    pass_filenames: false
   - id: golangci-lint
     name: golangci-lint
-    entry: make lint
+    entry: golangci-lint run --new-from-rev=HEAD --whole-files=false --fix
     language: system
     files: "(.*\\.go|go.mod|go.sum)$"
     pass_filenames: false

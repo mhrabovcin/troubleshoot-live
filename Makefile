@@ -9,7 +9,7 @@ gogenerate:
 	go generate ./...
 
 .PHONY: test
-test: tools.gotestsum gogenerate
+test: gogenerate
 	gotestsum --format pkgname --junitfile unit-tests.xml --jsonfile test.json -- -coverprofile=cover.out ./... && \
 		go tool cover -func=cover.out
 
@@ -50,7 +50,3 @@ release-snapshot:
 		--clean \
 		--parallelism=$(GORELEASER_PARALLELISM) \
 		--timeout=60m
-
-.PHONY: tools.gotestsum
-tools.gotestsum:
-	go install gotest.tools/gotestsum@v1.10.0

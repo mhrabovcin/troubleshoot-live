@@ -77,6 +77,28 @@ NAMESPACE     NAME                                       READY   STATUS    RESTA
 default   my-pod-66bff467f8-2j2xv                   1/1     Running   0          2m
 ```
 
+## Development
+
+Use [Devbox](https://www.jetify.com/devbox) for local development.
+Install Devbox using the official docs:
+<https://www.jetify.com/docs/devbox/installing_devbox/>
+
+```bash
+devbox shell
+```
+
+Common tasks:
+
+```bash
+devbox run -- make lint
+devbox run -- make test
+devbox run -- make build-snapshot
+devbox run -- make release-snapshot
+devbox run -- pre-commit install --install-hooks
+```
+
+Devbox is the default and supported local setup for this repository.
+
 ## Known issues
 
 ### `etcd` process is crashing
