@@ -3,7 +3,7 @@ repos:
   hooks:
   - id: golangci-lint
     name: golangci-lint
-    entry: make lint
+    entry: golangci-lint run --new-from-rev=HEAD --whole-files=false --fix
     language: system
     files: "(.*\\.go|go.mod|go.sum)$"
     pass_filenames: false
