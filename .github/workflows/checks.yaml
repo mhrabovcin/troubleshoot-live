@@ -19,27 +19,13 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v6
 
-      - name: Install asdf
-        uses: asdf-vm/actions/install@v3.0.2
+      - name: Install Devbox
+        uses: jetify-com/devbox-install-action@v0.12.0
         with:
-          asdf_branch: v0.11.2
-
-      - name: Gather tool versions
-        uses: endorama/asdf-parse-tool-versions@v1
-        id: versions
-
-      - uses: actions/setup-go@v6
-        with:
-          check-latest: false
-          cache: true
-          go-version-file: 'go.mod'
+          enable-cache: "true"
 
       - name: Run unit tests
-        run: make test
-        env:
-          # This env variable is set automatically by endorama/asdf-parse-tool-versions
-          # and mockery is picking it up.
-          MOCKERY_VERSION: ""
+        run: devbox run -- make test
 
       - name: Annotate tests
         if: always()
@@ -48,27 +34,18 @@ jobs:
           test-results: test.json
 
   lint:
-
-    permissions:
-      contents: write
-      pull-requests: write
-
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
         uses: actions/checkout@v6
 
-      - name: Gather tool versions
-        uses: endorama/asdf-parse-tool-versions@v1
-        id: versions
-
-      - name: golangci-lint
-        uses: reviewdog/action-golangci-lint@v2
+      - name: Install Devbox
+        uses: jetify-com/devbox-install-action@v0.12.0
         with:
-          fail_on_error: true
-          reporter: github-pr-review
-          go_version: v${{ fromJson(steps.versions.outputs.tools).golang }}
-          golangci_lint_version: v${{ fromJson(steps.versions.outputs.tools).golangci-lint }}
+          enable-cache: "true"
+
+      - name: Run lint
+        run: devbox run -- make lint
 
   pre-commit:
     runs-on: ubuntu-latest
@@ -76,22 +53,12 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v6
 
-      - name: Gather tool versions
-        uses: endorama/asdf-parse-tool-versions@v1
-        id: versions
-
-      - uses: actions/setup-go@v6
+      - name: Install Devbox
+        uses: jetify-com/devbox-install-action@v0.12.0
         with:
-          check-latest: false
-          cache: true
-          go-version-file: 'go.mod'
+          enable-cache: "true"
 
-      # - uses: mfinelli/setup-shfmt@v2
-      #   with:
-      #     shfmt-version: ${{ fromJson(steps.versions.outputs.tools).shfmt }}
-
-      - uses: pre-commit/action@v3.0.1
-        with:
-          extra_args: --all-files --show-diff-on-failure
+      - name: Run pre-commit
+        run: devbox run -- pre-commit run --all-files --show-diff-on-failure
         env:
           SKIP: no-commit-to-branch,golangci-lint
