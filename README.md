@@ -20,6 +20,16 @@ The proxy server allows to define on which address is the API server available. 
 
 ## Installation
 
+### Homebrew
+
+- Install with Homebrew tap:
+
+```bash
+brew install mhrabovcin/tap/troubleshoot-live
+```
+
+### Manual
+
 - Download and unpack a release from the Release page.
 
 ```bash
@@ -35,8 +45,6 @@ chmod +x troubleshoot-live
 ```bash
 sudo cp ./troubleshoot-live /usr/local/bin/troubleshoot-live
 ```
-
-- Use the `asdf` [plugin](https://github.com/adyatlov/asdf-troubleshoot-live).
 
 ## Usage
 
