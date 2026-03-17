@@ -28,7 +28,7 @@ jobs:
         uses: endorama/asdf-parse-tool-versions@v1
         id: versions
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           check-latest: false
           cache: true
@@ -80,7 +80,7 @@ jobs:
         uses: endorama/asdf-parse-tool-versions@v1
         id: versions
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           check-latest: false
           cache: true
