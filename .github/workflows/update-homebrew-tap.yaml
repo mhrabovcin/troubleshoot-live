@@ -47,7 +47,7 @@ jobs:
         run: ./scripts/release/update-homebrew-formula.sh
 
       - name: Create pull request in tap repository
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           path: homebrew-tap
