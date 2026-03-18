@@ -31,6 +31,8 @@ type serveOptions struct {
 	serviceNodePortRange  string
 }
 
+const internalProxyHTTPPrefix = "/bundles/default"
+
 // NewServeCommand serves the provided bundle.
 func NewServeCommand(out output.Output) *cobra.Command {
 	options := &serveOptions{
@@ -109,7 +111,11 @@ func runServe(bundlePath string, o *serveOptions, out output.Output) error {
 		out.Error(err, "failed to import support bundle resources to API server")
 	}
 
-	proxyHTTPAddress := fmt.Sprintf("http://%s", o.proxyAddress)
+	normalizedProxyPrefix, err := proxy.NormalizeHTTPPrefix(internalProxyHTTPPrefix)
+	if err != nil {
+		return fmt.Errorf("invalid proxy http prefix: %w", err)
+	}
+	proxyHTTPAddress := fmt.Sprintf("http://%s%s", o.proxyAddress, normalizedProxyPrefix)
 	kubeconfigPath, err := kubernetes.WriteProxyKubeconfig(proxyHTTPAddress, o.kubeconfigPath)
 	if err != nil {
 		return fmt.Errorf("failed to create kubeconfig: %w", err)
@@ -118,7 +124,10 @@ func runServe(bundlePath string, o *serveOptions, out output.Output) error {
 	out.Infof("Running HTTPs proxy service on: %s", proxyHTTPAddress)
 	out.Infof("KUBECONFIG=%s", kubeconfigPath)
 
-	proxyHandler := proxy.New(testEnv.Config, supportBundle, rewriter.Default())
+	proxyHandler, err := proxy.New(testEnv.Config, supportBundle, rewriter.Default(), normalizedProxyPrefix)
+	if err != nil {
+		return fmt.Errorf("failed to initialize proxy handler: %w", err)
+	}
 	loggedProxyHandler := handlers.LoggingHandler(out.InfoWriter(), proxyHandler)
 
 	s := http.Server{
