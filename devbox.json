@@ -2,14 +2,14 @@
   "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.14.0/.schema/devbox.schema.json",
   "packages": [
     "kubernetes-helm@3.10.0",
-    "golangci-lint@1.62.0",
     "pre-commit@4.3.0",
     "goreleaser@1.16.1",
     "go-mockery_2@2.53.6",
     "gotestsum@1.10.0",
     "gnumake@4.4.1",
     "shfmt@3.8.0",
-    "go@latest"
+    "go@latest",
+    "golangci-lint@latest"
   ],
   "shell": {
     "scripts": {
