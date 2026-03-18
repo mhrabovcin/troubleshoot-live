@@ -5,14 +5,16 @@ updates:
     schedule:
       interval: "weekly"
     groups:
-      k8s:
+      all-dependencies:
         patterns:
-          - "k8s.io*"
-          - "k8s.io*"
-          - "sigs.k8s.io*"
+          - "*"
 
   # Maintain dependencies for GitHub Actions
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      all-dependencies:
+        patterns:
+          - "*"
