@@ -19,3 +19,4 @@ dist
 unit-tests.xml
 test.json
 .devbox/
+.cache/
