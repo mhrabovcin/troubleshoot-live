@@ -87,7 +87,7 @@ func runServe(bundlePath string, o *serveOptions, out output.Output) error {
 	defer done()
 
 	out.StartOperation("Starting k8s server")
-	testEnv, err := startK8sServer(ctx, supportBundle, out, o)
+	testEnv, datastore, err := startK8sServer(ctx, supportBundle, out, o)
 	out.EndOperation(err == nil)
 	if err != nil {
 		return err
@@ -96,6 +96,9 @@ func runServe(bundlePath string, o *serveOptions, out output.Output) error {
 	defer func() {
 		if err := testEnv.Stop(); err != nil {
 			out.Error(err, "failed to stop k8s api server")
+		}
+		if err := datastore.Stop(); err != nil {
+			out.Error(err, "failed to stop datastore")
 		}
 	}()
 
@@ -145,10 +148,10 @@ func startK8sServer(
 	supportBundle bundle.Bundle,
 	out output.Output,
 	opts *serveOptions,
-) (*envtest.Environment, error) {
+) (*envtest.Environment, envtest.Datastore, error) {
 	testEnv, err := envtest.Prepare(ctx, supportBundle, envtest.Arch(opts.envtestArch))
 	if err != nil {
-		return nil, fmt.Errorf("failed to prepare k8s environment: %w", err)
+		return nil, nil, fmt.Errorf("failed to prepare k8s environment: %w", err)
 	}
 
 	testEnv.ControlPlane.GetAPIServer().Out = out.V(5).InfoWriter()
@@ -157,7 +160,7 @@ func startK8sServer(
 	serviceClusterIPRange, err := resolveServiceClusterIPRange(
 		opts.serviceClusterIPRange, supportBundle, out)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if serviceClusterIPRange != "" {
 		testEnv.ControlPlane.GetAPIServer().Configure().Append("service-cluster-ip-range", serviceClusterIPRange)
@@ -166,18 +169,27 @@ func startK8sServer(
 	serviceNodePortRange, err := resolveServiceNodePortRange(
 		opts.serviceNodePortRange, supportBundle, out)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if serviceNodePortRange != "" {
 		testEnv.ControlPlane.GetAPIServer().Configure().Append("service-node-port-range", serviceNodePortRange)
 	}
 
-	_, err = testEnv.Start()
+	datastore := envtest.NewLocalEtcdDatastore(testEnv.BinaryAssetsDirectory)
+	datastoreConnection, err := datastore.Start(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, fmt.Errorf("failed to start datastore: %w", err)
 	}
 
-	return testEnv, nil
+	_, err = testEnv.Start(envtest.WithDatastoreEndpoint(datastoreConnection.Endpoint))
+	if err != nil {
+		if stopErr := datastore.Stop(); stopErr != nil {
+			out.Error(stopErr, "failed to stop datastore after api server startup failure")
+		}
+		return nil, nil, err
+	}
+
+	return testEnv, datastore, nil
 }
 
 func resolveServiceNodePortRange(

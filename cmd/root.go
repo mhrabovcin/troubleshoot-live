@@ -29,11 +29,7 @@ func NewCommand(in io.Reader, out, errOut io.Writer) (*cobra.Command, output.Out
 
 // Execute runs the default CLI configuration.
 func Execute() {
-	rootCmd, out := NewCommand(os.Stdin, os.Stdout, os.Stderr)
+	rootCmd, _ := NewCommand(os.Stdin, os.Stdout, os.Stderr)
 	rootCmd.SilenceErrors = true
-
-	if err := rootCmd.Execute(); err != nil {
-		out.Error(err, "")
-		os.Exit(1)
-	}
+	cobra.CheckErr(rootCmd.Execute())
 }
