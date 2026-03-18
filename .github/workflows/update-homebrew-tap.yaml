@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout source repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Resolve tag name
         id: tag
@@ -32,7 +32,7 @@ jobs:
           fi
 
       - name: Checkout Homebrew tap repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: mhrabovcin/homebrew-tap
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
