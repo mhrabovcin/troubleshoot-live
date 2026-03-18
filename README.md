@@ -28,6 +28,20 @@ The proxy server allows to define on which address is the API server available. 
 brew install mhrabovcin/tap/troubleshoot-live
 ```
 
+### Nix
+
+- Run directly from GitHub:
+
+```bash
+nix run github:mhrabovcin/troubleshoot-live -- --help
+```
+
+- Run from local checkout:
+
+```bash
+nix run .#troubleshoot-live -- --help
+```
+
 ### Manual
 
 - Download and unpack a release from the Release page.
