@@ -1,0 +1,116 @@
+name: update-nix-vendor-hash
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+    paths:
+      - go.mod
+      - go.sum
+      - flake.nix
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  update-vendor-hash:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Decide whether update should run
+        id: guard
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          should_run=true
+          reason=""
+
+          if [[ "${{ github.actor }}" == "github-actions[bot]" ]]; then
+            should_run=false
+            reason="Skipping to avoid bot-triggered update loop."
+          elif [[ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]]; then
+            should_run=false
+            reason="Skipping because this PR comes from a fork, and this workflow cannot push to fork branches with GITHUB_TOKEN."
+          fi
+
+          echo "should_run=${should_run}" >> "${GITHUB_OUTPUT}"
+          echo "reason=${reason}" >> "${GITHUB_OUTPUT}"
+
+      - name: Explain skip reason
+        if: steps.guard.outputs.should_run != 'true'
+        run: echo "${{ steps.guard.outputs.reason }}"
+
+      - name: Check out code
+        if: steps.guard.outputs.should_run == 'true'
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - name: Install Nix
+        if: steps.guard.outputs.should_run == 'true'
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Detect vendor hash mismatch
+        if: steps.guard.outputs.should_run == 'true'
+        id: detect
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if nix build .#troubleshoot-live --no-link 2>build.log; then
+            echo "updated=false" >> "${GITHUB_OUTPUT}"
+            echo "hash=" >> "${GITHUB_OUTPUT}"
+            echo "vendorHash is already up to date."
+            exit 0
+          fi
+
+          new_hash="$(sed -nE 's/^[[:space:]]*got:[[:space:]]*(sha256-[A-Za-z0-9+\/=]+)[[:space:]]*$/\1/p' build.log | head -n1)"
+
+          if [[ -z "${new_hash}" ]]; then
+            echo "nix build failed, but no vendorHash mismatch hash could be parsed from output." >&2
+            echo "--- nix build stderr ---" >&2
+            cat build.log >&2
+            exit 1
+          fi
+
+          echo "Detected new vendorHash: ${new_hash}"
+
+          sed -E -i.bak "s#^([[:space:]]*vendorHash[[:space:]]*=[[:space:]]*\").*(\";.*)$#\1${new_hash}\2#" flake.nix
+          rm -f flake.nix.bak
+
+          if ! git diff --quiet -- flake.nix; then
+            echo "updated=true" >> "${GITHUB_OUTPUT}"
+            echo "hash=${new_hash}" >> "${GITHUB_OUTPUT}"
+          else
+            echo "updated=false" >> "${GITHUB_OUTPUT}"
+            echo "hash=${new_hash}" >> "${GITHUB_OUTPUT}"
+            echo "No change to flake.nix was required after parsing hash."
+          fi
+
+      - name: Verify updated hash
+        if: steps.guard.outputs.should_run == 'true' && steps.detect.outputs.updated == 'true'
+        run: nix build .#troubleshoot-live --no-link
+
+      - name: Commit updated flake.nix
+        if: steps.guard.outputs.should_run == 'true' && steps.detect.outputs.updated == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add flake.nix
+          git commit -m "chore(nix): update vendorHash"
+
+      - name: Push commit to PR branch
+        if: steps.guard.outputs.should_run == 'true' && steps.detect.outputs.updated == 'true'
+        run: git push origin HEAD:${{ github.event.pull_request.head.ref }}
