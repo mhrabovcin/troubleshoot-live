@@ -27,11 +27,6 @@ import (
 	"github.com/mhrabovcin/troubleshoot-live/pkg/utils"
 )
 
-// AnnotationForOriginalValue creates annotation key for given value.
-func AnnotationForOriginalValue(name string) string {
-	return fmt.Sprintf("troubleshoot-live/%s", name)
-}
-
 // ImportBundle creates resources in provided API server.
 func ImportBundle(ctx context.Context, b bundle.Bundle, restCfg *rest.Config, out output.Output) error {
 	dynamicClient, err := dynamic.NewForConfig(restCfg)
@@ -275,15 +270,6 @@ func importObject(
 	}
 
 	u := o.(*unstructured.Unstructured)
-
-	if u.GetKind() == "Job" {
-		// The .spec.selector is validated by core kube-apiserver and cannot be
-		// added without specifying the `manualSelector`.
-		_ = unstructured.SetNestedField(u.Object, true, "spec", "manualSelector")
-		annotations := u.GetAnnotations()
-		annotations[AnnotationForOriginalValue("added-spec.manualSelector")] = "true"
-		u.SetAnnotations(annotations)
-	}
 
 	_, err := cl.Resource(gvr).Namespace(u.GetNamespace()).Get(ctx, u.GetName(), metav1.GetOptions{})
 	if err != nil && apierrors.IsNotFound(err) {

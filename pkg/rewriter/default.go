@@ -10,6 +10,7 @@ func Default() ResourceRewriter {
 	return Multi(
 		GeneratedValues(),
 		DeletedNamespace(),
+		JobManualSelector(),
 		When(
 			MatchGVK(schema.FromAPIVersionAndKind("v1", "Pod")),
 			Multi(
