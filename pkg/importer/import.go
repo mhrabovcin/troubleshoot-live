@@ -7,11 +7,11 @@ import (
 	"io/fs"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/mesosphere/dkp-cli-runtime/core/output"
 	"github.com/spf13/afero"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -29,6 +29,20 @@ import (
 
 // ImportBundle creates resources in provided API server.
 func ImportBundle(ctx context.Context, b bundle.Bundle, restCfg *rest.Config, out output.Output) error {
+	return ImportBundleWithOptions(ctx, b, restCfg, out, DefaultImportOptions())
+}
+
+// ImportBundleWithOptions creates resources in provided API server.
+func ImportBundleWithOptions(
+	ctx context.Context,
+	b bundle.Bundle,
+	restCfg *rest.Config,
+	out output.Output,
+	opts ImportOptions,
+) error {
+	opts = normalizeImportOptions(opts)
+	importStartedAt := time.Now()
+
 	dynamicClient, err := dynamic.NewForConfig(restCfg)
 	if err != nil {
 		return err
@@ -44,22 +58,38 @@ func ImportBundle(ctx context.Context, b bundle.Bundle, restCfg *rest.Config, ou
 		discoveryClient: discoveryClient,
 		bundle:          b,
 		out:             out,
+		options:         opts,
 	}
 
-	importers := []importerFn{
-		importCRDs,
-		importNamespaces,
-		importClusterResources,
-		importCMs,
-		importSecrets,
+	importers := []struct {
+		name string
+		fn   importerFn
+	}{
+		{name: "crds", fn: importCRDs},
+		{name: "namespaces", fn: importNamespaces},
+		{name: "cluster-resources", fn: importClusterResources},
+		{name: "configmaps", fn: importCMs},
+		{name: "secrets", fn: importSecrets},
 	}
 
 	var importErrors []error
-	for _, importerFn := range importers {
-		if err := importerFn(ctx, cfg); err != nil {
-			importErrors = append(importErrors, err)
+	for _, importer := range importers {
+		stageStartedAt := time.Now()
+		err := importer.fn(ctx, cfg)
+		stageDuration := time.Since(stageStartedAt).Round(time.Millisecond)
+		if err != nil {
+			importErrors = append(importErrors, fmt.Errorf("stage %q: %w", importer.name, err))
+			out.Warnf("Import stage %q failed after %s", importer.name, stageDuration)
+			continue
 		}
+
+		out.Infof("Import stage %q completed in %s", importer.name, stageDuration)
 	}
+
+	out.Infof(
+		"Import stage metrics: duration=%s stages=%d failed-stages=%d concurrency=%d",
+		time.Since(importStartedAt).Round(time.Millisecond), len(importers), len(importErrors), opts.Concurrency,
+	)
 
 	if len(importErrors) > 0 {
 		out.Warn("\n!!! There were failures when importing the bundle data.")
@@ -75,6 +105,7 @@ type importerConfig struct {
 	discoveryClient discovery.DiscoveryInterface
 	bundle          bundle.Bundle
 	out             output.Output
+	options         ImportOptions
 }
 
 type importerFn func(context.Context, *importerConfig) error
@@ -90,19 +121,21 @@ func importNamespaces(
 		return err
 	}
 
+	if len(list.Items) == 0 {
+		return nil
+	}
+
 	populateGVK(list, schema.GroupVersionKind{
 		Version: "v1",
 		Kind:    "Namespace",
 	})
 
-	namespaces := []string{}
-	gvr, includeStatus, err := detectGVR(cfg.discoveryClient, &list.Items[0])
+	gvr, includeStatus, err := detectGVRWithRetry(ctx, cfg.discoveryClient, &list.Items[0])
 	if err != nil {
 		return err
 	}
+
 	return list.EachListItem(func(o runtime.Object) error {
-		u, _ := meta.Accessor(o)
-		namespaces = append(namespaces, u.GetName())
 		return importObject(ctx, cfg.dynamicClient, gvr, o, includeStatus)
 	})
 }
@@ -111,6 +144,8 @@ func importClusterResources(
 	ctx context.Context,
 	cfg *importerConfig,
 ) error {
+	tasks := []importTask{}
+
 	skipResources := []string{
 		// crds are imported during a separate step
 		"custom-resource-definitions.json",
@@ -128,7 +163,7 @@ func importClusterResources(
 		"pod-disruption-budgets",
 	}
 
-	return afero.Walk(cfg.bundle, cfg.bundle.Layout().ClusterResources(), func(path string, info fs.FileInfo, err error) error {
+	err := afero.Walk(cfg.bundle, cfg.bundle.Layout().ClusterResources(), func(path string, info fs.FileInfo, err error) error {
 		if err != nil {
 			cfg.out.Warnf("Failed to read file %q from bundle: %s", path, err)
 			return nil
@@ -177,26 +212,29 @@ func importClusterResources(
 
 		cfg.out.V(1).Infof("Importing objects from: %s ...", path)
 
-		gvr, includeStatus, err := detectGVR(cfg.discoveryClient, &list.Items[0])
+		gvr, includeStatus, err := detectGVRWithRetry(ctx, cfg.discoveryClient, &list.Items[0])
 		if err != nil {
 			cfg.out.Errorf(err, "failed to detect GVR from file %q. CRD for the resource may not be imported:", path)
 			return nil
 		}
 
-		_ = list.EachListItem(func(o runtime.Object) error {
-			err := importObject(ctx, cfg.dynamicClient, gvr, o, includeStatus)
-			if err != nil {
-				u, _ := meta.Accessor(o)
-				cfg.out.Warnf(
-					"Failed to import %q (%s) with error: %s",
-					fmt.Sprintf("%s/%s", u.GetNamespace(), u.GetName()), gvr, err,
-				)
-			}
-			return nil
-		})
+		for i := range list.Items {
+			tasks = append(tasks, importTask{
+				Stage:         stageClusterResources,
+				SourcePath:    path,
+				GVR:           gvr,
+				IncludeStatus: includeStatus,
+				Object:        list.Items[i].DeepCopy(),
+			})
+		}
 
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+
+	return executeConcurrentStage(ctx, cfg, stageClusterResources, tasks)
 }
 
 type cmOrSecretLoadFn func(afero.Fs, string) (*unstructured.Unstructured, error)
@@ -204,11 +242,14 @@ type cmOrSecretLoadFn func(afero.Fs, string) (*unstructured.Unstructured, error)
 func importCMOrSecrets(
 	ctx context.Context,
 	cfg *importerConfig,
+	stage importStage,
 	path string,
 	loadFn cmOrSecretLoadFn,
 	gvr schema.GroupVersionResource,
 ) error {
-	return afero.Walk(cfg.bundle, path, func(path string, info fs.FileInfo, err error) error {
+	tasks := []importTask{}
+
+	err := afero.Walk(cfg.bundle, path, func(path string, info fs.FileInfo, err error) error {
 		if err != nil {
 			cfg.out.Errorf(err, "Failed to read file %q from bundle", path)
 			return nil
@@ -226,12 +267,21 @@ func importCMOrSecrets(
 			return nil
 		}
 
-		if err := importObject(ctx, cfg.dynamicClient, gvr, obj, true); err != nil {
-			return err
-		}
+		tasks = append(tasks, importTask{
+			Stage:         stage,
+			SourcePath:    path,
+			GVR:           gvr,
+			IncludeStatus: true,
+			Object:        obj,
+		})
 
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+
+	return executeConcurrentStage(ctx, cfg, stage, tasks)
 }
 
 func importCMs(
@@ -243,7 +293,7 @@ func importCMs(
 		Resource: "configmaps",
 	}
 	return importCMOrSecrets(
-		ctx, cfg, cfg.bundle.Layout().ConfigMaps(), bundle.LoadConfigMap, gvr)
+		ctx, cfg, stageConfigMaps, cfg.bundle.Layout().ConfigMaps(), bundle.LoadConfigMap, gvr)
 }
 
 func importSecrets(
@@ -255,7 +305,39 @@ func importSecrets(
 		Resource: "secrets",
 	}
 	return importCMOrSecrets(
-		ctx, cfg, cfg.bundle.Layout().Secrets(), bundle.LoadSecret, gvr)
+		ctx, cfg, stageSecrets, cfg.bundle.Layout().Secrets(), bundle.LoadSecret, gvr)
+}
+
+func executeConcurrentStage(
+	ctx context.Context,
+	cfg *importerConfig,
+	stage importStage,
+	tasks []importTask,
+) error {
+	aggregator := newOutputAggregator(cfg.out, stage)
+	executor := stageExecutor{
+		workers: cfg.options.Concurrency,
+	}
+
+	return executor.Run(
+		ctx,
+		tasks,
+		func(runCtx context.Context, task importTask) importResult {
+			created, err := importObjectWithResult(
+				runCtx, cfg.dynamicClient, task.GVR, task.Object, task.IncludeStatus,
+			)
+			return importResult{
+				Stage:      task.Stage,
+				SourcePath: task.SourcePath,
+				GVR:        task.GVR,
+				Namespace:  task.Object.GetNamespace(),
+				Name:       task.Object.GetName(),
+				Created:    created,
+				Err:        err,
+			}
+		},
+		aggregator,
+	)
 }
 
 func importObject(
@@ -265,36 +347,53 @@ func importObject(
 	o runtime.Object,
 	includeStatus bool,
 ) error {
+	_, err := importObjectWithResult(ctx, cl, gvr, o, includeStatus)
+	return err
+}
+
+func importObjectWithResult(
+	ctx context.Context,
+	cl dynamic.Interface,
+	gvr schema.GroupVersionResource,
+	o runtime.Object,
+	includeStatus bool,
+) (bool, error) {
 	if err := prepareForImport(o); err != nil {
-		return err
+		return false, err
 	}
 
 	u := o.(*unstructured.Unstructured)
+	nsClient := cl.Resource(gvr).Namespace(u.GetNamespace())
 
-	_, err := cl.Resource(gvr).Namespace(u.GetNamespace()).Get(ctx, u.GetName(), metav1.GetOptions{})
-	if err != nil && apierrors.IsNotFound(err) {
-		nsClient := cl.Resource(gvr).Namespace(u.GetNamespace())
-		err := createResource(ctx, u, includeStatus, nsClient)
-		if err != nil {
-			return fmt.Errorf("failed to import resource: %w", err)
-		}
+	created, err := createResource(ctx, u, includeStatus, nsClient)
+	if err != nil {
+		return created, fmt.Errorf("failed to import resource: %w", err)
 	}
 
-	return nil
+	return created, nil
 }
 
-func createResource(ctx context.Context, u *unstructured.Unstructured, includeStatus bool, nsClient dynamic.ResourceInterface) error {
+func createResource(
+	ctx context.Context,
+	u *unstructured.Unstructured,
+	includeStatus bool,
+	nsClient dynamic.ResourceInterface,
+) (bool, error) {
 	_, err := nsClient.Create(ctx, u, metav1.CreateOptions{})
 	if err != nil {
-		return fmt.Errorf("failed to create resource: %w", err)
+		if apierrors.IsAlreadyExists(err) {
+			return false, nil
+		}
+
+		return false, fmt.Errorf("failed to create resource: %w", err)
 	}
 
 	// Only import status for objects with status field
 	if _, ok := u.Object["status"]; !ok || !includeStatus {
-		return nil
+		return true, nil
 	}
 
-	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+	err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		updated, err := nsClient.Get(ctx, u.GetName(), metav1.GetOptions{})
 		if err != nil {
 			return fmt.Errorf("failed to load created object: %w", err)
@@ -310,4 +409,45 @@ func createResource(ctx context.Context, u *unstructured.Unstructured, includeSt
 		}
 		return nil
 	})
+	if err != nil {
+		return true, err
+	}
+
+	return true, nil
+}
+
+func detectGVRWithRetry(
+	ctx context.Context,
+	cl discovery.DiscoveryInterface,
+	u *unstructured.Unstructured,
+) (schema.GroupVersionResource, bool, error) {
+	const maxAttempts = 5
+	const baseDelay = 200 * time.Millisecond
+
+	var (
+		lastErr       error
+		includeStatus bool
+		gvr           schema.GroupVersionResource
+	)
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		gvr, includeStatus, lastErr = detectGVR(cl, u)
+		if lastErr == nil {
+			return gvr, includeStatus, nil
+		}
+
+		if attempt == maxAttempts {
+			break
+		}
+
+		delay := time.Duration(attempt) * baseDelay
+		timer := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return schema.GroupVersionResource{}, false, ctx.Err()
+		case <-timer.C:
+		}
+	}
+
+	return schema.GroupVersionResource{}, false, lastErr
 }

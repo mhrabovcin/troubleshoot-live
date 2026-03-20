@@ -29,6 +29,7 @@ type serveOptions struct {
 	envtestArch           string
 	serviceClusterIPRange string
 	serviceNodePortRange  string
+	importConcurrency     int
 }
 
 const internalProxyHTTPPrefix = "/bundles/default"
@@ -36,9 +37,10 @@ const internalProxyHTTPPrefix = "/bundles/default"
 // NewServeCommand serves the provided bundle.
 func NewServeCommand(out output.Output) *cobra.Command {
 	options := &serveOptions{
-		kubeconfigPath: "./support-bundle-kubeconfig",
-		proxyAddress:   "localhost:8080",
-		envtestArch:    runtime.GOARCH,
+		kubeconfigPath:    "./support-bundle-kubeconfig",
+		proxyAddress:      "localhost:8080",
+		envtestArch:       runtime.GOARCH,
+		importConcurrency: importer.DefaultImportOptions().Concurrency,
 	}
 
 	cmd := &cobra.Command{
@@ -76,6 +78,11 @@ func NewServeCommand(out output.Output) *cobra.Command {
 		"override k8s api server service node port range",
 	)
 
+	cmd.Flags().IntVar(
+		&options.importConcurrency, "import-concurrency", options.importConcurrency,
+		"number of concurrent workers for resource import (clamped to 1..12)",
+	)
+
 	return cmd
 }
 
@@ -105,7 +112,13 @@ func runServe(bundlePath string, o *serveOptions, out output.Output) error {
 	}()
 
 	out.StartOperation("Importing bundle resources")
-	err = importer.ImportBundle(ctx, supportBundle, testEnv.Config, out)
+	err = importer.ImportBundleWithOptions(
+		ctx,
+		supportBundle,
+		testEnv.Config,
+		out,
+		importer.ImportOptions{Concurrency: o.importConcurrency},
+	)
 	out.EndOperation(err == nil)
 	if err != nil {
 		out.Error(err, "failed to import support bundle resources to API server")
