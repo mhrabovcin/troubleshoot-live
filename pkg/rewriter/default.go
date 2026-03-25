@@ -9,6 +9,7 @@ import (
 func Default() ResourceRewriter {
 	return Multi(
 		GeneratedValues(),
+		CRDDisableConversionWebhook(),
 		DeletedNamespace(),
 		JobManualSelector(),
 		When(
