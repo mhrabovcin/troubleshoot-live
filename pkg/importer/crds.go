@@ -6,10 +6,8 @@ import (
 	"log"
 	"path/filepath"
 
-	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
-	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -45,19 +43,6 @@ func loadCRDs(b bundle.Bundle) (*unstructured.UnstructuredList, error) {
 			item.SetKind("CustomResourceDefinition")
 		}
 
-		// Old versions of `troubleshoot` weren't always collecting the latest
-		// version of the resources, e.g. collected `v1beta1` instead of `v1`.
-		// If the CRD contains conversion config the envtest API server
-		// will try to execute the webhook and fail to import all the resources.
-		// In order to try importing all the resources remove the conversion webhook
-		// and let the validation fail for incorrect resources.
-		if err := unstructured.SetNestedField(item.Object, nil, "spec", "conversion", "webhook"); err != nil {
-			return nil, err
-		}
-		if err := unstructured.SetNestedField(
-			item.Object, string(apiextensions.NoneConverter), "spec", "conversion", "strategy"); err != nil {
-			return nil, err
-		}
 	}
 
 	return list, nil
@@ -79,10 +64,9 @@ func importCRDs(
 	cfg.out.Infof("Processing %d records from CRD file", len(list.Items))
 
 	return list.EachListItem(func(in runtime.Object) error {
-		o, _ := meta.Accessor(in)
 		u, _ := in.(*unstructured.Unstructured)
 		gvr, includeStatus, err := detectGVR(cfg.discoveryClient, u)
-		cfg.out.V(5).Infof("CRD import: detected %s %q", o.GetName(), gvr)
+		cfg.out.V(5).Infof("CRD import: detected %s %q", u.GetName(), gvr)
 
 		// Assume that k8s api server doesn't know about the old apiextensions v1beta1
 		// version. Attempt to convert it to v1.
@@ -90,7 +74,7 @@ func importCRDs(
 			cfg.out.V(1).Infof("Attempting to convert CRD %s from v1beta1 to v1", u.GetName())
 			v1beta1Extension := &apiextensionsv1beta1.CustomResourceDefinition{}
 			if err := runtime.DefaultUnstructuredConverter.FromUnstructured(u.Object, v1beta1Extension); err != nil {
-				return fmt.Errorf("failed to convert CRD unstructured to v1beta1 extension %q: %w", o.GetName(), err)
+				return fmt.Errorf("failed to convert CRD unstructured to v1beta1 extension %q: %w", u.GetName(), err)
 			}
 			v1Extension, err := convertCRD(v1beta1Extension)
 			if err != nil {
@@ -115,7 +99,7 @@ func importCRDs(
 		err = importObject(ctx, cfg.dynamicClient, gvr, in, includeStatus)
 		if err != nil {
 			cfg.out.Warnf(
-				"Failed to import CRD %q (%s) with error: %s", o.GetName(), gvr, err,
+				"Failed to import CRD %q (%s) with error: %s", u.GetName(), gvr, err,
 			)
 		}
 		return nil
