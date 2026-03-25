@@ -64,7 +64,11 @@ func importCRDs(
 	cfg.out.Infof("Processing %d records from CRD file", len(list.Items))
 
 	return list.EachListItem(func(in runtime.Object) error {
-		u, _ := in.(*unstructured.Unstructured)
+		u, err := asUnstructured(in)
+		if err != nil {
+			return err
+		}
+
 		gvr, includeStatus, err := detectGVR(cfg.discoveryClient, u)
 		cfg.out.V(5).Infof("CRD import: detected %s %q", u.GetName(), gvr)
 
@@ -96,7 +100,12 @@ func importCRDs(
 			in = &unstructured.Unstructured{Object: uMap}
 		}
 
-		err = importObject(ctx, cfg.dynamicClient, gvr, in, includeStatus)
+		uImport, err := asUnstructured(in)
+		if err != nil {
+			return err
+		}
+
+		err = importObject(ctx, cfg.dynamicClient, gvr, uImport, includeStatus, cfg.objectPreparer)
 		if err != nil {
 			cfg.out.Warnf(
 				"Failed to import CRD %q (%s) with error: %s", u.GetName(), gvr, err,

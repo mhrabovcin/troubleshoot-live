@@ -6,16 +6,22 @@ import (
 	"github.com/mhrabovcin/troubleshoot-live/pkg/rewriter"
 )
 
-// prepareForImport modifies object loaded from support bundle file in a way
-// that can be imported.
-func prepareForImport(in any) error {
-	// TODO(mh): inject
-	rr := rewriter.Default()
+// ObjectPreparer modifies object loaded from support bundle file in a way that
+// can be imported.
+type ObjectPreparer interface {
+	Prepare(u *unstructured.Unstructured) error
+}
 
-	u, ok := in.(*unstructured.Unstructured)
-	if !ok {
-		panic("non unstructured obj")
+type rewriterObjectPreparer struct {
+	rewriter rewriter.ResourceRewriter
+}
+
+func (p rewriterObjectPreparer) Prepare(u *unstructured.Unstructured) error {
+	return p.rewriter.BeforeImport(u)
+}
+
+func defaultObjectPreparer() ObjectPreparer {
+	return rewriterObjectPreparer{
+		rewriter: rewriter.Default(),
 	}
-
-	return rr.BeforeImport(u)
 }
