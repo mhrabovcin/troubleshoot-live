@@ -30,7 +30,7 @@ jobs:
 
       - name: Install Devbox
         if: ${{ steps.release.outputs.release_created == 'true' }}
-        uses: jetify-com/devbox-install-action@v0.14.0
+        uses: jetify-com/devbox-install-action@v0.15.0
         with:
           enable-cache: "true"
 
