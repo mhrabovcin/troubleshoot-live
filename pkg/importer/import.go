@@ -11,7 +11,6 @@ import (
 	"github.com/mesosphere/dkp-cli-runtime/core/output"
 	"github.com/spf13/afero"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -44,6 +43,7 @@ func ImportBundle(ctx context.Context, b bundle.Bundle, restCfg *rest.Config, ou
 		discoveryClient: discoveryClient,
 		bundle:          b,
 		out:             out,
+		objectPreparer:  defaultObjectPreparer(),
 	}
 
 	importers := []importerFn{
@@ -75,6 +75,7 @@ type importerConfig struct {
 	discoveryClient discovery.DiscoveryInterface
 	bundle          bundle.Bundle
 	out             output.Output
+	objectPreparer  ObjectPreparer
 }
 
 type importerFn func(context.Context, *importerConfig) error
@@ -101,9 +102,12 @@ func importNamespaces(
 		return err
 	}
 	return list.EachListItem(func(o runtime.Object) error {
-		u, _ := meta.Accessor(o)
+		u, err := asUnstructured(o)
+		if err != nil {
+			return err
+		}
 		namespaces = append(namespaces, u.GetName())
-		return importObject(ctx, cfg.dynamicClient, gvr, o, includeStatus)
+		return importObject(ctx, cfg.dynamicClient, gvr, u, includeStatus, cfg.objectPreparer)
 	})
 }
 
@@ -184,9 +188,14 @@ func importClusterResources(
 		}
 
 		_ = list.EachListItem(func(o runtime.Object) error {
-			err := importObject(ctx, cfg.dynamicClient, gvr, o, includeStatus)
+			u, err := asUnstructured(o)
 			if err != nil {
-				u, _ := meta.Accessor(o)
+				cfg.out.Warnf("Failed to convert object from %q with error: %s", path, err)
+				return nil
+			}
+
+			err = importObject(ctx, cfg.dynamicClient, gvr, u, includeStatus, cfg.objectPreparer)
+			if err != nil {
 				cfg.out.Warnf(
 					"Failed to import %q (%s) with error: %s",
 					fmt.Sprintf("%s/%s", u.GetNamespace(), u.GetName()), gvr, err,
@@ -226,7 +235,7 @@ func importCMOrSecrets(
 			return nil
 		}
 
-		if err := importObject(ctx, cfg.dynamicClient, gvr, obj, true); err != nil {
+		if err := importObject(ctx, cfg.dynamicClient, gvr, obj, true, cfg.objectPreparer); err != nil {
 			return err
 		}
 
@@ -262,25 +271,32 @@ func importObject(
 	ctx context.Context,
 	cl dynamic.Interface,
 	gvr schema.GroupVersionResource,
-	o runtime.Object,
+	o *unstructured.Unstructured,
 	includeStatus bool,
+	preparer ObjectPreparer,
 ) error {
-	if err := prepareForImport(o); err != nil {
+	if err := preparer.Prepare(o); err != nil {
 		return err
 	}
 
-	u := o.(*unstructured.Unstructured)
-
-	_, err := cl.Resource(gvr).Namespace(u.GetNamespace()).Get(ctx, u.GetName(), metav1.GetOptions{})
+	_, err := cl.Resource(gvr).Namespace(o.GetNamespace()).Get(ctx, o.GetName(), metav1.GetOptions{})
 	if err != nil && apierrors.IsNotFound(err) {
-		nsClient := cl.Resource(gvr).Namespace(u.GetNamespace())
-		err := createResource(ctx, u, includeStatus, nsClient)
+		nsClient := cl.Resource(gvr).Namespace(o.GetNamespace())
+		err := createResource(ctx, o, includeStatus, nsClient)
 		if err != nil {
 			return fmt.Errorf("failed to import resource: %w", err)
 		}
 	}
 
 	return nil
+}
+
+func asUnstructured(o runtime.Object) (*unstructured.Unstructured, error) {
+	u, ok := o.(*unstructured.Unstructured)
+	if !ok {
+		return nil, fmt.Errorf("expected *unstructured.Unstructured, got %T", o)
+	}
+	return u, nil
 }
 
 func createResource(ctx context.Context, u *unstructured.Unstructured, includeStatus bool, nsClient dynamic.ResourceInterface) error {
