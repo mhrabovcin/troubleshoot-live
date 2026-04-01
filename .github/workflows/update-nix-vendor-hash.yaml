@@ -72,7 +72,7 @@ jobs:
             exit 0
           fi
 
-          new_hash="$(sed -nE 's/^[[:space:]]*got:[[:space:]]*(sha256-[A-Za-z0-9+\/=]+)[[:space:]]*$/\1/p' build.log | head -n1)"
+          new_hash="$(sed -nE 's/^[[:space:]]*got:[[:space:]]*(sha256-[A-Za-z0-9+/=]+)[[:space:]]*$/\1/p' build.log | head -n1)"
 
           if [[ -z "${new_hash}" ]]; then
             echo "nix build failed, but no vendorHash mismatch hash could be parsed from output." >&2
@@ -81,10 +81,36 @@ jobs:
             exit 1
           fi
 
+          if [[ ! "${new_hash}" =~ ^sha256-[A-Za-z0-9+/=]+$ ]]; then
+            echo "Parsed hash has unexpected format: ${new_hash}" >&2
+            exit 1
+          fi
+
           echo "Detected new vendorHash: ${new_hash}"
 
-          sed -E -i.bak "s#^([[:space:]]*vendorHash[[:space:]]*=[[:space:]]*\").*(\";.*)$#\1${new_hash}\2#" flake.nix
-          rm -f flake.nix.bak
+          tmp_flake="$(mktemp)"
+          if awk -v hash="${new_hash}" '
+            BEGIN { updated = 0 }
+            {
+              if (updated == 0 && $0 ~ /^[[:space:]]*vendorHash[[:space:]]*=[[:space:]]*".*";/) {
+                sub(/"[^"]*"/, "\"" hash "\"")
+                updated = 1
+              }
+              print
+            }
+            END { if (updated == 0) exit 42 }
+          ' flake.nix > "${tmp_flake}"; then
+            mv "${tmp_flake}" flake.nix
+          else
+            awk_status=$?
+            rm -f "${tmp_flake}"
+            if [[ "${awk_status}" -eq 42 ]]; then
+              echo "Could not find vendorHash assignment in flake.nix." >&2
+            else
+              echo "Failed to update vendorHash in flake.nix." >&2
+            fi
+            exit 1
+          fi
 
           if ! git diff --quiet -- flake.nix; then
             echo "updated=true" >> "${GITHUB_OUTPUT}"
