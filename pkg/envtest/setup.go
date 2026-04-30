@@ -46,7 +46,7 @@ func Prepare(ctx context.Context, b bundle.Bundle, opts ...Option) (*Environment
 	}
 
 	log.Printf("Using envtest binaries from directory: %s\n", binaryAssetsDirectory)
-	return newEnvironment(binaryAssetsDirectory), nil
+	return newEnvironment(binaryAssetsDirectory, detectedK8sVersion), nil
 }
 
 func setupEnvtest(ctx context.Context, e *env.Env) (_ string, err error) {

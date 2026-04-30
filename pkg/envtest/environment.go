@@ -6,9 +6,13 @@ import (
 	"fmt"
 	"net/url"
 	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
 
 	"k8s.io/client-go/rest"
 	controllerruntimeenvtest "sigs.k8s.io/controller-runtime/pkg/envtest"
+	"sigs.k8s.io/controller-runtime/tools/setup-envtest/versions"
 )
 
 // DatastoreConnection describes datastore endpoint details for API server wiring.
@@ -21,6 +25,12 @@ type DatastoreConnection struct {
 type APIServerStorageConfig struct {
 	Endpoint *url.URL
 	Prefix   string
+}
+
+// APIServerStartConfig defines configuration passed to API server startup.
+type APIServerStartConfig struct {
+	Storage      APIServerStorageConfig
+	FeatureGates map[string]bool
 }
 
 // Datastore is a handle for datastore lifecycle and connection details.
@@ -72,7 +82,8 @@ type Environment struct {
 	ControlPlane          controllerruntimeenvtest.ControlPlane
 	Config                *rest.Config
 
-	storageConfig APIServerStorageConfig
+	k8sVersion  versions.Selector
+	startConfig APIServerStartConfig
 
 	apiServerStarted bool
 
@@ -81,12 +92,16 @@ type Environment struct {
 	addAdminUserFn   func(*controllerruntimeenvtest.ControlPlane) (*rest.Config, error)
 }
 
-func newEnvironment(binaryAssetsDirectory string) *Environment {
+func newEnvironment(binaryAssetsDirectory string, k8sVersion versions.Selector) *Environment {
 	return &Environment{
 		BinaryAssetsDirectory: binaryAssetsDirectory,
-		startAPIServerFn:      startAPIServer,
-		stopAPIServerFn:       stopAPIServer,
-		addAdminUserFn:        addAdminUser,
+		k8sVersion:            k8sVersion,
+		startConfig: APIServerStartConfig{
+			FeatureGates: map[string]bool{},
+		},
+		startAPIServerFn: startAPIServer,
+		stopAPIServerFn:  stopAPIServer,
+		addAdminUserFn:   addAdminUser,
 	}
 }
 
@@ -107,14 +122,17 @@ func (e *Environment) Start(opts ...StartOption) (*rest.Config, error) {
 		apiServer.Path = filepath.Join(e.BinaryAssetsDirectory, "kube-apiserver")
 	}
 
-	storageCfg := e.storageConfig
+	startCfg := e.startConfig
+	startCfg.FeatureGates = copyFeatureGates(startCfg.FeatureGates)
 	for _, opt := range opts {
-		opt(&storageCfg)
+		opt(&startCfg)
 	}
+	defaultAPIServerFeatureGates(startCfg.FeatureGates, e.k8sVersion)
 
-	if err := configureAPIServerStorage(apiServer, storageCfg); err != nil {
+	if err := configureAPIServerStorage(apiServer, startCfg.Storage); err != nil {
 		return nil, err
 	}
+	configureAPIServerFeatureGates(apiServer, startCfg.FeatureGates)
 
 	if err := e.startAPIServerFn(apiServer); err != nil {
 		return nil, fmt.Errorf("failed to start api server: %w", err)
@@ -154,6 +172,60 @@ func configureAPIServerStorage(apiServer *controllerruntimeenvtest.APIServer, cf
 		apiServer.Configure().Set("etcd-prefix", cfg.Prefix)
 	}
 	return nil
+}
+
+func copyFeatureGates(featureGates map[string]bool) map[string]bool {
+	copied := make(map[string]bool, len(featureGates))
+	for name, enabled := range featureGates {
+		copied[name] = enabled
+	}
+	return copied
+}
+
+func defaultAPIServerFeatureGates(featureGates map[string]bool, k8sVersion versions.Selector) {
+	if featureGates == nil {
+		return
+	}
+	if _, ok := featureGates["WatchList"]; ok {
+		return
+	}
+	if supportsWatchList(k8sVersion) {
+		featureGates["WatchList"] = true
+	}
+}
+
+func configureAPIServerFeatureGates(apiServer *controllerruntimeenvtest.APIServer, featureGates map[string]bool) {
+	if len(featureGates) == 0 {
+		return
+	}
+
+	names := make([]string, 0, len(featureGates))
+	for name := range featureGates {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	values := make([]string, 0, len(names))
+	for _, name := range names {
+		values = append(values, name+"="+strconv.FormatBool(featureGates[name]))
+	}
+	apiServer.Configure().Set("feature-gates", strings.Join(values, ","))
+}
+
+func supportsWatchList(k8sVersion versions.Selector) bool {
+	if k8sVersion == nil {
+		return false
+	}
+
+	switch v := k8sVersion.(type) {
+	case versions.Concrete:
+		return v.Major > 1 || (v.Major == 1 && v.Minor >= 27)
+	case versions.PatchSelector:
+		return v.Major > 1 || (v.Major == 1 && v.Minor >= 27)
+	default:
+		concrete := k8sVersion.AsConcrete()
+		return concrete != nil && (concrete.Major > 1 || (concrete.Major == 1 && concrete.Minor >= 27))
+	}
 }
 
 func startAPIServer(apiServer *controllerruntimeenvtest.APIServer) error {
