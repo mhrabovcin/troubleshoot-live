@@ -60,3 +60,43 @@ func TestProxyWithPrefixStripsPrefixBeforeForwarding(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 	assert.Equal(t, "/api/v1/pods", gotPath)
 }
+
+func TestPreferJSONOverProtobuf(t *testing.T) {
+	tests := []struct {
+		name   string
+		accept string
+		want   string
+	}{
+		{
+			name:   "removes protobuf when json fallback exists",
+			accept: "application/vnd.kubernetes.protobuf, application/json",
+			want:   "application/json",
+		},
+		{
+			name:   "preserves non protobuf media types",
+			accept: "application/vnd.kubernetes.protobuf, application/json;as=Table;v=v1;g=meta.k8s.io, application/json",
+			want:   "application/json;as=Table;v=v1;g=meta.k8s.io, application/json",
+		},
+		{
+			name:   "falls back to json when only protobuf is accepted",
+			accept: "application/vnd.kubernetes.protobuf",
+			want:   "application/json",
+		},
+		{
+			name:   "leaves json request unchanged",
+			accept: "application/json",
+			want:   "application/json",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/pods", nil)
+			req.Header.Set("Accept", tt.accept)
+
+			preferJSONOverProtobuf(req)
+
+			assert.Equal(t, tt.want, req.Header.Get("Accept"))
+		})
+	}
+}
