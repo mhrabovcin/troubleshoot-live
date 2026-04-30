@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.0](https://github.com/mhrabovcin/troubleshoot-live/compare/v0.1.0...v0.2.0) (2026-04-30)
+
+
+### Features
+
+* rewrite describe output ([#175](https://github.com/mhrabovcin/troubleshoot-live/issues/175)) ([36852e0](https://github.com/mhrabovcin/troubleshoot-live/commit/36852e0592bba26c7feb52bdf960984b36a6816c))
+
 ## [0.1.0](https://github.com/mhrabovcin/troubleshoot-live/compare/v0.0.20...v0.1.0) (2026-04-30)
 
 
