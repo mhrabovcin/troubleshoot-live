@@ -16,7 +16,7 @@
           pkgs = import nixpkgs { inherit system; };
         in
         {
-          troubleshoot-live = pkgs.buildGoModule {
+          troubleshoot-live = pkgs.buildGo126Module {
             pname = "troubleshoot-live";
             version = "0.0.0";
             src = self;
@@ -24,7 +24,7 @@
             subPackages = [ "." ];
 
             # Replace with real hash from nix build output.
-            vendorHash = "sha256-xP6dMAAfM9SgzMfMcYrMiJA1Bl6jAjBF8gKPOlkb2k8=";
+            vendorHash = "sha256-U1ATmY1hXkQ62BC3G9ug7rNr4YIinF/fdrnFovJpg04=";
 
             ldflags = [
               "-s"
