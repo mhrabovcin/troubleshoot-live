@@ -8,7 +8,16 @@ import (
 	"github.com/stretchr/testify/require"
 	"k8s.io/client-go/rest"
 	controllerruntimeenvtest "sigs.k8s.io/controller-runtime/pkg/envtest"
+	"sigs.k8s.io/controller-runtime/tools/setup-envtest/versions"
 )
+
+func testK8sVersion(minor int) versions.Selector {
+	return versions.PatchSelector{
+		Major: 1,
+		Minor: minor,
+		Patch: versions.AnyPoint,
+	}
+}
 
 func TestNewLocalEtcdDatastoreUsesBinaryAssetsDirectory(t *testing.T) {
 	ds := NewLocalEtcdDatastore("/tmp/envtest-assets")
@@ -19,7 +28,7 @@ func TestNewLocalEtcdDatastoreUsesBinaryAssetsDirectory(t *testing.T) {
 }
 
 func TestEnvironmentStartRequiresStorageEndpoint(t *testing.T) {
-	env := newEnvironment("/tmp/envtest-assets")
+	env := newEnvironment("/tmp/envtest-assets", testK8sVersion(27))
 	env.startAPIServerFn = func(_ *controllerruntimeenvtest.APIServer) error { return nil }
 	env.addAdminUserFn = func(_ *controllerruntimeenvtest.ControlPlane) (*rest.Config, error) {
 		return &rest.Config{Host: "https://127.0.0.1:6443"}, nil
@@ -34,7 +43,7 @@ func TestEnvironmentStartUsesConfiguredStorageEndpointAndPrefix(t *testing.T) {
 	endpoint, err := url.Parse("http://127.0.0.1:2379")
 	require.NoError(t, err)
 
-	env := newEnvironment("/tmp/envtest-assets")
+	env := newEnvironment("/tmp/envtest-assets", testK8sVersion(27))
 	env.startAPIServerFn = func(_ *controllerruntimeenvtest.APIServer) error { return nil }
 	env.addAdminUserFn = func(_ *controllerruntimeenvtest.ControlPlane) (*rest.Config, error) {
 		return &rest.Config{Host: "https://127.0.0.1:6443"}, nil
@@ -52,11 +61,68 @@ func TestEnvironmentStartUsesConfiguredStorageEndpointAndPrefix(t *testing.T) {
 	assert.Equal(t, []string{"/registry/test"}, apiServer.Configure().Get("etcd-prefix").Get(nil))
 }
 
+func TestEnvironmentStartDefaultsWatchListFeatureGateForSupportedVersion(t *testing.T) {
+	endpoint, err := url.Parse("http://127.0.0.1:2379")
+	require.NoError(t, err)
+
+	env := newEnvironment("/tmp/envtest-assets", testK8sVersion(27))
+	env.startAPIServerFn = func(_ *controllerruntimeenvtest.APIServer) error { return nil }
+	env.addAdminUserFn = func(_ *controllerruntimeenvtest.ControlPlane) (*rest.Config, error) {
+		return &rest.Config{Host: "https://127.0.0.1:6443"}, nil
+	}
+
+	_, err = env.Start(WithDatastoreEndpoint(endpoint))
+	require.NoError(t, err)
+
+	apiServer := env.ControlPlane.GetAPIServer()
+	assert.Equal(t, []string{"WatchList=true"}, apiServer.Configure().Get("feature-gates").Get(nil))
+}
+
+func TestEnvironmentStartSkipsWatchListFeatureGateForUnsupportedVersion(t *testing.T) {
+	endpoint, err := url.Parse("http://127.0.0.1:2379")
+	require.NoError(t, err)
+
+	env := newEnvironment("/tmp/envtest-assets", testK8sVersion(26))
+	env.startAPIServerFn = func(_ *controllerruntimeenvtest.APIServer) error { return nil }
+	env.addAdminUserFn = func(_ *controllerruntimeenvtest.ControlPlane) (*rest.Config, error) {
+		return &rest.Config{Host: "https://127.0.0.1:6443"}, nil
+	}
+
+	_, err = env.Start(WithDatastoreEndpoint(endpoint))
+	require.NoError(t, err)
+
+	apiServer := env.ControlPlane.GetAPIServer()
+	assert.Nil(t, apiServer.Configure().Get("feature-gates").Get(nil))
+}
+
+func TestEnvironmentStartUsesExplicitFeatureGates(t *testing.T) {
+	endpoint, err := url.Parse("http://127.0.0.1:2379")
+	require.NoError(t, err)
+
+	env := newEnvironment("/tmp/envtest-assets", testK8sVersion(27))
+	env.startAPIServerFn = func(_ *controllerruntimeenvtest.APIServer) error { return nil }
+	env.addAdminUserFn = func(_ *controllerruntimeenvtest.ControlPlane) (*rest.Config, error) {
+		return &rest.Config{Host: "https://127.0.0.1:6443"}, nil
+	}
+
+	_, err = env.Start(
+		WithDatastoreEndpoint(endpoint),
+		WithAPIServerFeatureGates(map[string]bool{
+			"OtherFeature": true,
+			"WatchList":    false,
+		}),
+	)
+	require.NoError(t, err)
+
+	apiServer := env.ControlPlane.GetAPIServer()
+	assert.Equal(t, []string{"OtherFeature=true,WatchList=false"}, apiServer.Configure().Get("feature-gates").Get(nil))
+}
+
 func TestEnvironmentStopStopsOnlyAPIServer(t *testing.T) {
 	endpoint, err := url.Parse("http://127.0.0.1:2379")
 	require.NoError(t, err)
 
-	env := newEnvironment("/tmp/envtest-assets")
+	env := newEnvironment("/tmp/envtest-assets", testK8sVersion(27))
 
 	stopped := 0
 	env.startAPIServerFn = func(_ *controllerruntimeenvtest.APIServer) error { return nil }

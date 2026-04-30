@@ -10,7 +10,7 @@ import (
 type Option func(*env.Env)
 
 // StartOption allows to configure runtime API server startup.
-type StartOption func(*APIServerStorageConfig)
+type StartOption func(*APIServerStartConfig)
 
 // Arch can override default go runtime detected system arch. This can be useful
 // when running on `arm64` and envtest binaries are not available for the platform.
@@ -22,14 +22,36 @@ func Arch(arch string) Option {
 
 // WithDatastoreEndpoint configures the datastore endpoint used by the API server.
 func WithDatastoreEndpoint(endpoint *url.URL) StartOption {
-	return func(cfg *APIServerStorageConfig) {
-		cfg.Endpoint = endpoint
+	return func(cfg *APIServerStartConfig) {
+		cfg.Storage.Endpoint = endpoint
 	}
 }
 
 // WithDatastorePrefix configures kube-apiserver --etcd-prefix value.
 func WithDatastorePrefix(prefix string) StartOption {
-	return func(cfg *APIServerStorageConfig) {
-		cfg.Prefix = prefix
+	return func(cfg *APIServerStartConfig) {
+		cfg.Storage.Prefix = prefix
+	}
+}
+
+// WithAPIServerFeatureGate configures a kube-apiserver --feature-gates entry.
+func WithAPIServerFeatureGate(name string, enabled bool) StartOption {
+	return func(cfg *APIServerStartConfig) {
+		if cfg.FeatureGates == nil {
+			cfg.FeatureGates = map[string]bool{}
+		}
+		cfg.FeatureGates[name] = enabled
+	}
+}
+
+// WithAPIServerFeatureGates configures kube-apiserver --feature-gates entries.
+func WithAPIServerFeatureGates(featureGates map[string]bool) StartOption {
+	return func(cfg *APIServerStartConfig) {
+		if cfg.FeatureGates == nil {
+			cfg.FeatureGates = map[string]bool{}
+		}
+		for name, enabled := range featureGates {
+			cfg.FeatureGates[name] = enabled
+		}
 	}
 }
