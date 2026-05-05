@@ -1,9 +1,11 @@
 name: update-homebrew-tap
 
 on:
-  release:
+  workflow_run:
+    workflows:
+      - release
     types:
-      - published
+      - completed
   workflow_dispatch:
     inputs:
       tag:
@@ -15,18 +17,27 @@ permissions:
 
 jobs:
   update-tap:
+    if: ${{ github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push') }}
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout source repository
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
 
       - name: Resolve tag name
         id: tag
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "${GITHUB_EVENT_NAME}" == "release" ]]; then
-            echo "value=${{ github.event.release.tag_name }}" >> "${GITHUB_OUTPUT}"
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_run" ]]; then
+            TAG_NAME="$(git tag --points-at HEAD | grep '^v' | head -n1 || true)"
+            if [[ -z "${TAG_NAME}" ]]; then
+              echo "No v* tag points at workflow_run head SHA; skipping." >&2
+              exit 1
+            fi
+            echo "value=${TAG_NAME}" >> "${GITHUB_OUTPUT}"
           else
             echo "value=${{ inputs.tag }}" >> "${GITHUB_OUTPUT}"
           fi
