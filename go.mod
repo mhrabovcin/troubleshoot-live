@@ -3,7 +3,7 @@ module github.com/mhrabovcin/troubleshoot-live
 go 1.26.0
 
 require (
-	github.com/Masterminds/semver/v3 v3.4.0
+	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/go-logr/logr v1.4.3
 	github.com/gorilla/handlers v1.5.2
 	github.com/gorilla/mux v1.8.1
@@ -17,8 +17,8 @@ require (
 	k8s.io/apimachinery v0.36.0
 	k8s.io/client-go v0.36.0
 	k8s.io/utils v0.0.0-20260210185600-b8788abfbbc2
-	sigs.k8s.io/controller-runtime v0.23.3
-	sigs.k8s.io/controller-runtime/tools/setup-envtest v0.0.0-20241206182001-aea2e32a9365
+	sigs.k8s.io/controller-runtime v0.24.0
+	sigs.k8s.io/controller-runtime/tools/setup-envtest v0.24.0
 )
 
 require (
