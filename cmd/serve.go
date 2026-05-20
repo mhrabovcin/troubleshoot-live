@@ -32,6 +32,7 @@ type serveOptions struct {
 }
 
 const internalProxyHTTPPrefix = "/bundles/default"
+const defaultStorageID = "default"
 
 // NewServeCommand serves the provided bundle.
 func NewServeCommand(out output.Output) *cobra.Command {
@@ -89,7 +90,7 @@ func runServe(bundlePath string, o *serveOptions, out output.Output) error {
 	defer done()
 
 	out.StartOperation("Starting k8s server")
-	testEnv, datastore, err := startK8sServer(ctx, supportBundle, out, o)
+	testEnv, storageBackend, err := startK8sServer(ctx, supportBundle, out, o)
 	out.EndOperation(err == nil)
 	if err != nil {
 		return err
@@ -99,8 +100,8 @@ func runServe(bundlePath string, o *serveOptions, out output.Output) error {
 		if err := testEnv.Stop(); err != nil {
 			out.Error(err, "failed to stop k8s api server")
 		}
-		if err := datastore.Stop(); err != nil {
-			out.Error(err, "failed to stop datastore")
+		if err := storageBackend.Stop(); err != nil {
+			out.Error(err, "failed to stop storage backend")
 		}
 	}()
 
@@ -157,7 +158,7 @@ func startK8sServer(
 	supportBundle bundle.Bundle,
 	out output.Output,
 	opts *serveOptions,
-) (*envtest.Environment, envtest.Datastore, error) {
+) (*envtest.Environment, envtest.StorageBackend, error) {
 	testEnv, err := envtest.Prepare(ctx, supportBundle, envtest.Arch(opts.envtestArch))
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to prepare k8s environment: %w", err)
@@ -184,21 +185,23 @@ func startK8sServer(
 		testEnv.ControlPlane.GetAPIServer().Configure().Append("service-node-port-range", serviceNodePortRange)
 	}
 
-	datastore := envtest.NewLocalEtcdDatastore(testEnv.BinaryAssetsDirectory)
-	datastoreConnection, err := datastore.Start(ctx)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to start datastore: %w", err)
+	storageBackend := envtest.NewLocalEtcdStorageBackend(testEnv.BinaryAssetsDirectory)
+	if err := storageBackend.Start(ctx); err != nil {
+		return nil, nil, fmt.Errorf("failed to start storage backend: %w", err)
 	}
 
-	_, err = testEnv.Start(envtest.WithDatastoreEndpoint(datastoreConnection.Endpoint))
+	_, err = testEnv.Start(ctx,
+		envtest.WithStorageBackend(storageBackend),
+		envtest.WithStorageID(defaultStorageID),
+	)
 	if err != nil {
-		if stopErr := datastore.Stop(); stopErr != nil {
-			out.Error(stopErr, "failed to stop datastore after api server startup failure")
+		if stopErr := storageBackend.Stop(); stopErr != nil {
+			out.Error(stopErr, "failed to stop storage backend after api server startup failure")
 		}
 		return nil, nil, err
 	}
 
-	return testEnv, datastore, nil
+	return testEnv, storageBackend, nil
 }
 
 func resolveServiceNodePortRange(

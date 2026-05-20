@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/url"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -15,68 +14,17 @@ import (
 	"sigs.k8s.io/controller-runtime/tools/setup-envtest/versions"
 )
 
-// DatastoreConnection describes datastore endpoint details for API server wiring.
-type DatastoreConnection struct {
-	Endpoint *url.URL
-	Metadata map[string]string
-}
-
-// APIServerStorageConfig defines storage-level configuration passed to API server startup.
-type APIServerStorageConfig struct {
-	Endpoint *url.URL
-	Prefix   string
-}
-
 // APIServerStartConfig defines configuration passed to API server startup.
 type APIServerStartConfig struct {
-	Storage      APIServerStorageConfig
-	FeatureGates map[string]bool
-}
-
-// Datastore is a handle for datastore lifecycle and connection details.
-//
-// Datastore lifecycle is intentionally managed by callers outside of
-// Environment so one datastore can be shared across multiple API servers.
-type Datastore interface {
-	Start(context.Context) (*DatastoreConnection, error)
-	Stop() error
-}
-
-// NewLocalEtcdDatastore creates a local etcd datastore handle.
-func NewLocalEtcdDatastore(binaryAssetsDirectory string) Datastore {
-	return &localEtcdDatastore{
-		etcd: &controllerruntimeenvtest.Etcd{
-			Path: filepath.Join(binaryAssetsDirectory, "etcd"),
-		},
-	}
-}
-
-type localEtcdDatastore struct {
-	etcd *controllerruntimeenvtest.Etcd
-}
-
-func (d *localEtcdDatastore) Start(_ context.Context) (*DatastoreConnection, error) {
-	if err := d.etcd.Start(); err != nil {
-		return nil, err
-	}
-
-	return &DatastoreConnection{
-		Endpoint: d.etcd.URL,
-		Metadata: map[string]string{
-			"type": "local-etcd",
-		},
-	}, nil
-}
-
-func (d *localEtcdDatastore) Stop() error {
-	return d.etcd.Stop()
+	StorageBackend StorageBackend
+	StorageID      string
+	FeatureGates   map[string]bool
 }
 
 // Environment wraps API server lifecycle for support-bundle replay.
 //
-// The current default runtime behavior remains unchanged: one local etcd process
-// per API server instance. The additional abstraction is intentionally internal
-// and lays groundwork for future shared datastore implementations.
+// Storage lifecycle is managed outside of Environment so one storage backend can
+// be shared across multiple API servers.
 type Environment struct {
 	BinaryAssetsDirectory string
 	ControlPlane          controllerruntimeenvtest.ControlPlane
@@ -106,7 +54,7 @@ func newEnvironment(binaryAssetsDirectory string, k8sVersion versions.Selector) 
 }
 
 // Start starts API server and returns admin rest config.
-func (e *Environment) Start(opts ...StartOption) (*rest.Config, error) {
+func (e *Environment) Start(ctx context.Context, opts ...StartOption) (*rest.Config, error) {
 	if e.startAPIServerFn == nil {
 		e.startAPIServerFn = startAPIServer
 	}
@@ -129,7 +77,18 @@ func (e *Environment) Start(opts ...StartOption) (*rest.Config, error) {
 	}
 	defaultAPIServerFeatureGates(startCfg.FeatureGates, e.k8sVersion)
 
-	if err := configureAPIServerStorage(apiServer, startCfg.Storage); err != nil {
+	if startCfg.StorageBackend == nil {
+		return nil, errors.New("missing storage backend")
+	}
+	if startCfg.StorageID == "" {
+		return nil, errors.New("missing storage id")
+	}
+	storageAllocation, err := startCfg.StorageBackend.Allocate(ctx, startCfg.StorageID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to allocate storage: %w", err)
+	}
+
+	if err := configureAPIServerStorage(apiServer, storageAllocation); err != nil {
 		return nil, err
 	}
 	configureAPIServerFeatureGates(apiServer, startCfg.FeatureGates)
@@ -162,14 +121,19 @@ func (e *Environment) Stop() error {
 	return nil
 }
 
-func configureAPIServerStorage(apiServer *controllerruntimeenvtest.APIServer, cfg APIServerStorageConfig) error {
-	if cfg.Endpoint == nil {
-		return errors.New("missing datastore endpoint")
+func configureAPIServerStorage(apiServer *controllerruntimeenvtest.APIServer, allocation *StorageAllocation) error {
+	if allocation == nil || allocation.URL == nil {
+		return errors.New("missing storage URL")
 	}
 
-	apiServer.EtcdURL = cfg.Endpoint
-	if cfg.Prefix != "" {
-		apiServer.Configure().Set("etcd-prefix", cfg.Prefix)
+	apiServer.EtcdURL = allocation.URL
+	names := make([]string, 0, len(allocation.APIServerArgs))
+	for name := range allocation.APIServerArgs {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		apiServer.Configure().Set(name, allocation.APIServerArgs[name])
 	}
 	return nil
 }

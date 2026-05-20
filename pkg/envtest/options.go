@@ -1,10 +1,6 @@
 package envtest
 
-import (
-	"net/url"
-
-	"sigs.k8s.io/controller-runtime/tools/setup-envtest/env"
-)
+import "sigs.k8s.io/controller-runtime/tools/setup-envtest/env"
 
 // Option allows to configure environment.
 type Option func(*env.Env)
@@ -20,17 +16,17 @@ func Arch(arch string) Option {
 	}
 }
 
-// WithDatastoreEndpoint configures the datastore endpoint used by the API server.
-func WithDatastoreEndpoint(endpoint *url.URL) StartOption {
+// WithStorageBackend configures the storage backend used by the API server.
+func WithStorageBackend(storageBackend StorageBackend) StartOption {
 	return func(cfg *APIServerStartConfig) {
-		cfg.Storage.Endpoint = endpoint
+		cfg.StorageBackend = storageBackend
 	}
 }
 
-// WithDatastorePrefix configures kube-apiserver --etcd-prefix value.
-func WithDatastorePrefix(prefix string) StartOption {
+// WithStorageID configures the storage allocation identity for one API server.
+func WithStorageID(id string) StartOption {
 	return func(cfg *APIServerStartConfig) {
-		cfg.Storage.Prefix = prefix
+		cfg.StorageID = id
 	}
 }
 
