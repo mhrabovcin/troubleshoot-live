@@ -4,13 +4,60 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
 )
 
+type gvrCacheEntry struct {
+	gvr           schema.GroupVersionResource
+	includeStatus bool
+}
+
+type gvrResolver struct {
+	discoveryClient discovery.DiscoveryInterface
+	mu              sync.RWMutex
+	cache           map[string]gvrCacheEntry
+}
+
+func newGVRResolver(cl discovery.DiscoveryInterface) *gvrResolver {
+	return &gvrResolver{
+		discoveryClient: cl,
+		cache:           map[string]gvrCacheEntry{},
+	}
+}
+
+func (r *gvrResolver) Detect(u *unstructured.Unstructured) (schema.GroupVersionResource, bool, error) {
+	cacheKey := fmt.Sprintf("%s|%s", u.GetAPIVersion(), u.GetKind())
+	r.mu.RLock()
+	cacheEntry, found := r.cache[cacheKey]
+	r.mu.RUnlock()
+	if found {
+		return cacheEntry.gvr, cacheEntry.includeStatus, nil
+	}
+
+	gvr, includeStatus, err := detectGVRUncached(r.discoveryClient, u)
+	if err != nil {
+		return schema.GroupVersionResource{}, false, err
+	}
+
+	r.mu.Lock()
+	r.cache[cacheKey] = gvrCacheEntry{
+		gvr:           gvr,
+		includeStatus: includeStatus,
+	}
+	r.mu.Unlock()
+
+	return gvr, includeStatus, nil
+}
+
 func detectGVR(cl discovery.DiscoveryInterface, u *unstructured.Unstructured) (schema.GroupVersionResource, bool, error) {
+	return detectGVRUncached(cl, u)
+}
+
+func detectGVRUncached(cl discovery.DiscoveryInterface, u *unstructured.Unstructured) (schema.GroupVersionResource, bool, error) {
 	resourcesList, err := cl.ServerResourcesForGroupVersion(u.GetAPIVersion())
 	if err != nil {
 		return schema.GroupVersionResource{}, false, err
