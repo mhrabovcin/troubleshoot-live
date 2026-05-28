@@ -7,6 +7,8 @@ import (
 	"io/fs"
 	"path/filepath"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/mesosphere/dkp-cli-runtime/core/output"
 	"github.com/spf13/afero"
@@ -15,6 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
@@ -25,6 +28,100 @@ import (
 	"github.com/mhrabovcin/troubleshoot-live/pkg/cli"
 	"github.com/mhrabovcin/troubleshoot-live/pkg/utils"
 )
+
+const (
+	defaultImportWorkers  = 8
+	defaultCRDWaitTimeout = 60 * time.Second
+)
+
+var importRetryBackoff = wait.Backoff{
+	Steps:    5,
+	Duration: 100 * time.Millisecond,
+	Factor:   2.0,
+	Jitter:   0.2,
+}
+
+type importTask struct {
+	sourcePath    string
+	gvr           schema.GroupVersionResource
+	object        *unstructured.Unstructured
+	includeStatus bool
+}
+
+type workerPool struct {
+	jobs chan importTask
+	wg   sync.WaitGroup
+	mu   sync.Mutex
+	errs []error
+	once sync.Once
+}
+
+func newWorkerPool(ctx context.Context, workers int, handler func(context.Context, importTask) error) *workerPool {
+	if workers < 1 {
+		workers = 1
+	}
+	wp := &workerPool{
+		jobs: make(chan importTask, workers*2), // Buffer to avoid blocking disk I/O
+	}
+
+	for i := 0; i < workers; i++ {
+		wp.wg.Add(1)
+		go func() {
+			defer wp.wg.Done()
+			for task := range wp.jobs {
+				if err := handler(ctx, task); err != nil {
+					wp.mu.Lock()
+					wp.errs = append(wp.errs, err)
+					wp.mu.Unlock()
+				}
+			}
+		}()
+	}
+	return wp
+}
+
+// Add returns an error if the context is cancelled, preventing silent task loss.
+func (wp *workerPool) Add(ctx context.Context, task importTask) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case wp.jobs <- task:
+		return nil
+	}
+}
+
+// Close ensures the channel is closed safely and idempotently.
+func (wp *workerPool) Close() {
+	wp.once.Do(func() {
+		close(wp.jobs)
+	})
+}
+
+// Wait closes the channel and blocks until all workers finish.
+func (wp *workerPool) Wait() error {
+	wp.Close() // Ensure the channel is closed before waiting
+	wp.wg.Wait()
+
+	wp.mu.Lock()
+	defer wp.mu.Unlock()
+	if len(wp.errs) == 0 {
+		return nil
+	}
+	return errors.Join(wp.errs...)
+}
+
+func newImportWorkerPool(ctx context.Context, cfg *importerConfig) *workerPool {
+	return newWorkerPool(ctx, defaultImportWorkers, func(innerCtx context.Context, task importTask) error {
+		err := importObjectWithRetry(innerCtx, cfg.dynamicClient, task.gvr, task.object, task.includeStatus, cfg.objectPreparer)
+		if err != nil {
+			cfg.out.Warnf(
+				"Failed to import %q (%s) from %q with error: %s",
+				objectReference(task.object), task.gvr, task.sourcePath, err,
+			)
+		}
+		return err
+	})
+}
 
 // ImportBundle creates resources in provided API server.
 func ImportBundle(ctx context.Context, b bundle.Bundle, restCfg *rest.Config, out output.Output) error {
@@ -44,8 +141,11 @@ func ImportBundle(ctx context.Context, b bundle.Bundle, restCfg *rest.Config, ou
 		bundle:          b,
 		out:             out,
 		objectPreparer:  defaultObjectPreparer(),
+		gvrResolver:     newGVRResolver(discoveryClient),
+		crdWaitTimeout:  defaultCRDWaitTimeout,
 	}
 
+	var importErrors []error
 	importers := []importerFn{
 		importCRDs,
 		importNamespaces,
@@ -54,7 +154,6 @@ func ImportBundle(ctx context.Context, b bundle.Bundle, restCfg *rest.Config, ou
 		importSecrets,
 	}
 
-	var importErrors []error
 	for _, importerFn := range importers {
 		if err := importerFn(ctx, cfg); err != nil {
 			importErrors = append(importErrors, err)
@@ -76,6 +175,8 @@ type importerConfig struct {
 	bundle          bundle.Bundle
 	out             output.Output
 	objectPreparer  ObjectPreparer
+	gvrResolver     *gvrResolver
+	crdWaitTimeout  time.Duration
 }
 
 type importerFn func(context.Context, *importerConfig) error
@@ -83,12 +184,12 @@ type importerFn func(context.Context, *importerConfig) error
 func importNamespaces(
 	ctx context.Context,
 	cfg *importerConfig,
-) error {
+) (err error) {
 	namespacesPath := filepath.Join(cfg.bundle.Layout().ClusterResources(), "namespaces.json")
-	list, err := bundle.LoadResourcesFromFile(cfg.bundle, namespacesPath)
-	if err != nil {
+	list, loadErr := bundle.LoadResourcesFromFile(cfg.bundle, namespacesPath)
+	if loadErr != nil {
 		cli.WarnOnErrorsFilePresence(cfg.bundle, cfg.out, namespacesPath)
-		return err
+		return loadErr
 	}
 
 	populateGVK(list, schema.GroupVersionKind{
@@ -96,34 +197,56 @@ func importNamespaces(
 		Kind:    "Namespace",
 	})
 
-	namespaces := []string{}
-	gvr, includeStatus, err := detectGVR(cfg.discoveryClient, &list.Items[0])
-	if err != nil {
-		return err
+	if len(list.Items) == 0 {
+		return nil
 	}
-	return list.EachListItem(func(o runtime.Object) error {
-		u, err := asUnstructured(o)
-		if err != nil {
-			return err
+
+	gvr, includeStatus, detectErr := cfg.gvrResolver.Detect(&list.Items[0])
+	if detectErr != nil {
+		return detectErr
+	}
+
+	cfg.out.V(1).Infof("Importing namespaces concurrently...")
+	wp := newImportWorkerPool(ctx, cfg)
+
+	defer func() {
+		if wErr := wp.Wait(); wErr != nil {
+			err = errors.Join(err, wErr)
 		}
-		namespaces = append(namespaces, u.GetName())
-		return importObject(ctx, cfg.dynamicClient, gvr, u, includeStatus, cfg.objectPreparer)
-	})
+	}()
+
+	var prepareErrors []error
+	for i := range list.Items {
+		u, errUns := asUnstructured(&list.Items[i])
+		if errUns != nil {
+			prepareErrors = append(prepareErrors, errUns)
+			continue
+		}
+
+		addErr := wp.Add(ctx, importTask{
+			sourcePath:    namespacesPath,
+			gvr:           gvr,
+			object:        u.DeepCopy(),
+			includeStatus: includeStatus,
+		})
+		if addErr != nil {
+			prepareErrors = append(prepareErrors, addErr)
+			break // Context cancelled
+		}
+	}
+
+	return errors.Join(prepareErrors...)
 }
 
 func importClusterResources(
 	ctx context.Context,
 	cfg *importerConfig,
-) error {
+) (err error) {
 	skipResources := []string{
-		// crds are imported during a separate step
 		"custom-resource-definitions.json",
 		"pod-disruption-budgets-info.json",
-		// api-resources from the discovery client
 		"resources.json",
-		// api-groups from the discovery client
 		"groups.json",
-		// namespaces are imported as first resource in a separate step
 		"namespaces.json",
 	}
 
@@ -132,34 +255,43 @@ func importClusterResources(
 		"pod-disruption-budgets",
 	}
 
-	return afero.Walk(cfg.bundle, cfg.bundle.Layout().ClusterResources(), func(path string, info fs.FileInfo, err error) error {
-		if err != nil {
-			cfg.out.Warnf("Failed to read file %q from bundle: %s", path, err)
+	cfg.out.V(1).Infof("Importing cluster resources concurrently...")
+	wp := newImportWorkerPool(ctx, cfg)
+
+	defer func() {
+		if wErr := wp.Wait(); wErr != nil {
+			err = errors.Join(err, wErr)
+		}
+	}()
+
+	var importErrors []error
+	walkErr := afero.Walk(cfg.bundle, cfg.bundle.Layout().ClusterResources(), func(path string, info fs.FileInfo, walkErr error) error {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+
+		if walkErr != nil {
+			cfg.out.Warnf("Failed to read file %q from bundle: %s", path, walkErr)
 			return nil
 		}
 
-		// Do not process any resources from the directory
 		if info.IsDir() && slices.Contains(skipDirs, filepath.Base(info.Name())) {
 			return fs.SkipDir
 		}
 
-		if info.IsDir() {
+		if info.IsDir() || slices.Contains(skipResources, filepath.Base(info.Name())) {
 			return nil
 		}
 
-		if slices.Contains(skipResources, filepath.Base(info.Name())) {
-			return nil
-		}
-
-		// skip failed resources
 		if strings.HasSuffix(strings.TrimSuffix(filepath.Base(path), filepath.Ext(path)), "-errors") {
 			return nil
 		}
 
-		list, err := bundle.LoadResourcesFromFile(cfg.bundle, path)
-		if err != nil {
+		list, loadErr := bundle.LoadResourcesFromFile(cfg.bundle, path)
+		if loadErr != nil {
 			cli.WarnOnErrorsFilePresence(cfg.bundle, cfg.out, path)
-			cfg.out.Errorf(utils.MaxErrorString(err, 200), "Failed to load resources from file %q", path)
+			cfg.out.Errorf(utils.MaxErrorString(loadErr, 200), "Failed to load resources from file %q", path)
+			importErrors = append(importErrors, loadErr)
 			return nil
 		}
 
@@ -167,45 +299,45 @@ func importClusterResources(
 			return nil
 		}
 
-		// Kind was not stored in older troubleshoot versions for non-CRDs, try to
-		// figure out the kind by the filename.
 		if list.Items[0].GetKind() == "" {
-			relPath, err := filepath.Rel(cfg.bundle.Layout().ClusterResources(), path)
-			if err != nil {
-				return fmt.Errorf("failed to detect kind for path %q: %w", path, err)
+			relPath, relErr := filepath.Rel(cfg.bundle.Layout().ClusterResources(), path)
+			if relErr != nil {
+				return fmt.Errorf("failed to detect kind for path %q: %w", path, relErr)
 			}
-			if gvk, err := gvkFromFile(relPath); err == nil {
-				populateGVK(list, gvk)
+			if gvkLocal, errFromFile := gvkFromFile(relPath); errFromFile == nil {
+				populateGVK(list, gvkLocal)
 			}
 		}
 
-		cfg.out.V(1).Infof("Importing objects from: %s ...", path)
+		cfg.out.V(1).Infof("Loading objects from: %s ...", path)
 
-		gvr, includeStatus, err := detectGVR(cfg.discoveryClient, &list.Items[0])
-		if err != nil {
-			cfg.out.Errorf(err, "failed to detect GVR from file %q. CRD for the resource may not be imported:", path)
+		gvr, includeStatus, detectErr := cfg.gvrResolver.Detect(&list.Items[0])
+		if detectErr != nil {
+			cfg.out.Errorf(detectErr, "failed to detect GVR from file %q. CRD for the resource may not be imported:", path)
+			importErrors = append(importErrors, detectErr)
 			return nil
 		}
 
-		_ = list.EachListItem(func(o runtime.Object) error {
-			u, err := asUnstructured(o)
-			if err != nil {
-				cfg.out.Warnf("Failed to convert object from %q with error: %s", path, err)
-				return nil
+		for i := range list.Items {
+			addErr := wp.Add(ctx, importTask{
+				sourcePath:    path,
+				gvr:           gvr,
+				object:        list.Items[i].DeepCopy(),
+				includeStatus: includeStatus,
+			})
+			if addErr != nil {
+				return addErr // Context cancelled, abort Walk
 			}
-
-			err = importObject(ctx, cfg.dynamicClient, gvr, u, includeStatus, cfg.objectPreparer)
-			if err != nil {
-				cfg.out.Warnf(
-					"Failed to import %q (%s) with error: %s",
-					fmt.Sprintf("%s/%s", u.GetNamespace(), u.GetName()), gvr, err,
-				)
-			}
-			return nil
-		})
+		}
 
 		return nil
 	})
+
+	if walkErr != nil {
+		importErrors = append(importErrors, walkErr)
+	}
+
+	return errors.Join(importErrors...)
 }
 
 type cmOrSecretLoadFn func(afero.Fs, string) (*unstructured.Unstructured, error)
@@ -216,10 +348,24 @@ func importCMOrSecrets(
 	path string,
 	loadFn cmOrSecretLoadFn,
 	gvr schema.GroupVersionResource,
-) error {
-	return afero.Walk(cfg.bundle, path, func(path string, info fs.FileInfo, err error) error {
-		if err != nil {
-			cfg.out.Errorf(err, "Failed to read file %q from bundle", path)
+) (err error) {
+	wp := newImportWorkerPool(ctx, cfg)
+
+	defer func() {
+		if wErr := wp.Wait(); wErr != nil {
+			err = errors.Join(err, wErr)
+		}
+	}()
+
+	var importErrors []error
+	walkErr := afero.Walk(cfg.bundle, path, func(path string, info fs.FileInfo, walkErr error) error {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+
+		if walkErr != nil {
+			cfg.out.Errorf(walkErr, "Failed to read file %q from bundle", path)
+			importErrors = append(importErrors, walkErr)
 			return nil
 		}
 
@@ -229,18 +375,31 @@ func importCMOrSecrets(
 
 		cfg.out.V(1).Infof("Importing %s from: %s ... ", gvr.Resource, path)
 
-		obj, err := loadFn(cfg.bundle, path)
-		if err != nil {
-			cfg.out.Errorf(utils.MaxErrorString(err, 200), "Failed to import secret from %q", path)
+		obj, loadErr := loadFn(cfg.bundle, path)
+		if loadErr != nil {
+			cfg.out.Errorf(utils.MaxErrorString(loadErr, 200), "Failed to import secret from %q", path)
+			importErrors = append(importErrors, loadErr)
 			return nil
 		}
 
-		if err := importObject(ctx, cfg.dynamicClient, gvr, obj, true, cfg.objectPreparer); err != nil {
-			return err
+		addErr := wp.Add(ctx, importTask{
+			sourcePath:    path,
+			gvr:           gvr,
+			object:        obj,
+			includeStatus: true,
+		})
+		if addErr != nil {
+			return addErr // Context cancelled, abort Walk
 		}
 
 		return nil
 	})
+
+	if walkErr != nil {
+		importErrors = append(importErrors, walkErr)
+	}
+
+	return errors.Join(importErrors...)
 }
 
 func importCMs(
@@ -275,20 +434,38 @@ func importObject(
 	includeStatus bool,
 	preparer ObjectPreparer,
 ) error {
+	_, err := importObjectWithResult(ctx, cl, gvr, o, includeStatus, preparer)
+	return err
+}
+
+// importObjectWithResult returns true if the object was created, or an error otherwise.
+func importObjectWithResult(
+	ctx context.Context,
+	cl dynamic.Interface,
+	gvr schema.GroupVersionResource,
+	o *unstructured.Unstructured,
+	includeStatus bool,
+	preparer ObjectPreparer,
+) (bool, error) {
 	if err := preparer.Prepare(o); err != nil {
-		return err
+		return false, err
 	}
 
 	_, err := cl.Resource(gvr).Namespace(o.GetNamespace()).Get(ctx, o.GetName(), metav1.GetOptions{})
-	if err != nil && apierrors.IsNotFound(err) {
-		nsClient := cl.Resource(gvr).Namespace(o.GetNamespace())
-		err := createResource(ctx, o, includeStatus, nsClient)
-		if err != nil {
-			return fmt.Errorf("failed to import resource: %w", err)
+	if err != nil {
+		if !apierrors.IsNotFound(err) {
+			return false, fmt.Errorf("failed to get resource: %w", err)
 		}
+		nsClient := cl.Resource(gvr).Namespace(o.GetNamespace())
+
+		created, err := createResource(ctx, o, includeStatus, nsClient)
+		if err != nil {
+			return false, fmt.Errorf("failed to import resource: %w", err)
+		}
+		return created, nil
 	}
 
-	return nil
+	return false, nil
 }
 
 func asUnstructured(o runtime.Object) (*unstructured.Unstructured, error) {
@@ -299,18 +476,21 @@ func asUnstructured(o runtime.Object) (*unstructured.Unstructured, error) {
 	return u, nil
 }
 
-func createResource(ctx context.Context, u *unstructured.Unstructured, includeStatus bool, nsClient dynamic.ResourceInterface) error {
+func createResource(ctx context.Context, u *unstructured.Unstructured, includeStatus bool, nsClient dynamic.ResourceInterface) (bool, error) {
 	_, err := nsClient.Create(ctx, u, metav1.CreateOptions{})
 	if err != nil {
-		return fmt.Errorf("failed to create resource: %w", err)
+		if apierrors.IsAlreadyExists(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to create resource: %w", err)
 	}
 
 	// Only import status for objects with status field
 	if _, ok := u.Object["status"]; !ok || !includeStatus {
-		return nil
+		return true, nil
 	}
 
-	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+	err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		updated, err := nsClient.Get(ctx, u.GetName(), metav1.GetOptions{})
 		if err != nil {
 			return fmt.Errorf("failed to load created object: %w", err)
@@ -326,4 +506,56 @@ func createResource(ctx context.Context, u *unstructured.Unstructured, includeSt
 		}
 		return nil
 	})
+
+	return true, err
+}
+
+func objectReference(u *unstructured.Unstructured) string {
+	if u == nil {
+		return "<nil>"
+	}
+	if u.GetNamespace() == "" {
+		return u.GetName()
+	}
+	return fmt.Sprintf("%s/%s", u.GetNamespace(), u.GetName())
+}
+
+func importObjectWithRetry(
+	ctx context.Context,
+	cl dynamic.Interface,
+	gvr schema.GroupVersionResource,
+	o *unstructured.Unstructured,
+	includeStatus bool,
+	preparer ObjectPreparer,
+) error {
+	return retry.OnError(importRetryBackoff, isRetryableImportErr, func() error {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return importObject(ctx, cl, gvr, o.DeepCopy(), includeStatus, preparer)
+	})
+}
+
+func isRetryableImportErr(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+
+	return apierrors.IsTooManyRequests(err) ||
+		apierrors.IsTimeout(err) ||
+		apierrors.IsServerTimeout(err) ||
+		apierrors.IsServiceUnavailable(err) ||
+		apierrors.IsInternalError(err) ||
+		apierrors.IsNotFound(err)
+}
+
+func errorOrNil(err error) []error {
+	if err == nil {
+		return nil
+	}
+	return []error{err}
 }
