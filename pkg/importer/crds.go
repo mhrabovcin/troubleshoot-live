@@ -216,6 +216,9 @@ func waitForCRDsEstablished(ctx context.Context, cfg *importerConfig, crdNames [
 				if apierrors.IsNotFound(err) || isRetryableImportErr(err) {
 					continue
 				}
+				if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+					break
+				}
 				return fmt.Errorf("failed checking CRD %q established condition: %w", name, err)
 			}
 			if established {
