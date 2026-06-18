@@ -53,10 +53,6 @@ func (r *gvrResolver) Detect(u *unstructured.Unstructured) (schema.GroupVersionR
 	return gvr, includeStatus, nil
 }
 
-func detectGVR(cl discovery.DiscoveryInterface, u *unstructured.Unstructured) (schema.GroupVersionResource, bool, error) {
-	return detectGVRUncached(cl, u)
-}
-
 func detectGVRUncached(cl discovery.DiscoveryInterface, u *unstructured.Unstructured) (schema.GroupVersionResource, bool, error) {
 	resourcesList, err := cl.ServerResourcesForGroupVersion(u.GetAPIVersion())
 	if err != nil {
