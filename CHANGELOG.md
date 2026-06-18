@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.2.1](https://github.com/mhrabovcin/troubleshoot-live/compare/v0.2.0...v0.2.1) (2026-06-18)
+
+
+### Bug Fixes
+
+* release please action ([#177](https://github.com/mhrabovcin/troubleshoot-live/issues/177)) ([8abd783](https://github.com/mhrabovcin/troubleshoot-live/commit/8abd78352f24ef9184ab4217cfed8c6b44f341e3))
+* use PAT for creating releases ([#178](https://github.com/mhrabovcin/troubleshoot-live/issues/178)) ([37731db](https://github.com/mhrabovcin/troubleshoot-live/commit/37731db64e13f4ea8d325fda83342f0341f16d2a))
+
+
+### Performance Improvements
+
+* **importer:** implement streaming worker pool to fix OOM - concurrency ([#184](https://github.com/mhrabovcin/troubleshoot-live/issues/184)) ([c9c029e](https://github.com/mhrabovcin/troubleshoot-live/commit/c9c029eef949d381b72b0eb1a1b11c1f45157803))
+
 ## [0.2.0](https://github.com/mhrabovcin/troubleshoot-live/compare/v0.1.0...v0.2.0) (2026-04-30)
 
 
