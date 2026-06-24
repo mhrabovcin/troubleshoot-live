@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout source repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
@@ -43,7 +43,7 @@ jobs:
           fi
 
       - name: Checkout Homebrew tap repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: mhrabovcin/homebrew-tap
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
