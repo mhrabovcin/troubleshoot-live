@@ -24,7 +24,7 @@
             subPackages = [ "." ];
 
             # Replace with real hash from nix build output.
-            vendorHash = "sha256-Libv/fhqnoWT4Gqx3XB8e6tzn7ct5QN1Opt8Vm7hYIg=";
+            vendorHash = "sha256-yVRJYdF9PM4OGRCSCfMUjJ3QsvQuhz4YIBJkk14Cnr8=";
 
             ldflags = [
               "-s"
