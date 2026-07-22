@@ -79,6 +79,39 @@ func TestWorkerPoolRunsTasksInParallel(t *testing.T) {
 	}
 }
 
+func TestWorkerPoolRespectsWorkerLimit(t *testing.T) {
+	t.Parallel()
+
+	for _, workers := range []int{1, 2} {
+		var inFlight int32
+		var maxInFlight int32
+		wp := newWorkerPool(context.Background(), workers, func(_ context.Context, _ importTask) error {
+			current := atomic.AddInt32(&inFlight, 1)
+			defer atomic.AddInt32(&inFlight, -1)
+			for {
+				previous := atomic.LoadInt32(&maxInFlight)
+				if current <= previous || atomic.CompareAndSwapInt32(&maxInFlight, previous, current) {
+					break
+				}
+			}
+			time.Sleep(5 * time.Millisecond)
+			return nil
+		})
+
+		for i := 0; i < 8; i++ {
+			if err := wp.Add(context.Background(), importTask{}); err != nil {
+				t.Fatalf("unexpected add error: %v", err)
+			}
+		}
+		if err := wp.Wait(); err != nil {
+			t.Fatalf("wait failed: %v", err)
+		}
+		if maxInFlight > int32(workers) {
+			t.Fatalf("%d workers ran %d tasks concurrently", workers, maxInFlight)
+		}
+	}
+}
+
 func TestWorkerPoolAggregatesErrors(t *testing.T) {
 	t.Parallel()
 

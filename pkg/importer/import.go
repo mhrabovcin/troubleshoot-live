@@ -30,7 +30,7 @@ import (
 )
 
 const (
-	defaultImportWorkers  = 8
+	DefaultImportWorkers  = 8
 	defaultCRDWaitTimeout = 60 * time.Second
 )
 
@@ -111,7 +111,7 @@ func (wp *workerPool) Wait() error {
 }
 
 func newImportWorkerPool(ctx context.Context, cfg *importerConfig) *workerPool {
-	return newWorkerPool(ctx, defaultImportWorkers, func(innerCtx context.Context, task importTask) error {
+	return newWorkerPool(ctx, cfg.importWorkers, func(innerCtx context.Context, task importTask) error {
 		err := importObjectWithRetry(innerCtx, cfg.dynamicClient, task.gvr, task.object, task.includeStatus, cfg.objectPreparer)
 		if err != nil {
 			cfg.out.Warnf(
@@ -124,7 +124,12 @@ func newImportWorkerPool(ctx context.Context, cfg *importerConfig) *workerPool {
 }
 
 // ImportBundle creates resources in provided API server.
-func ImportBundle(ctx context.Context, b bundle.Bundle, restCfg *rest.Config, out output.Output) error {
+func ImportBundle(ctx context.Context, b bundle.Bundle, restCfg *rest.Config, out output.Output, importWorkers int) error {
+	if importWorkers < 1 {
+		return fmt.Errorf("import workers must be a positive integer")
+	}
+	out.Infof("Using %d importer workers", importWorkers)
+
 	dynamicClient, err := dynamic.NewForConfig(restCfg)
 	if err != nil {
 		return err
@@ -143,6 +148,7 @@ func ImportBundle(ctx context.Context, b bundle.Bundle, restCfg *rest.Config, ou
 		objectPreparer:  defaultObjectPreparer(),
 		gvrResolver:     newGVRResolver(discoveryClient),
 		crdWaitTimeout:  defaultCRDWaitTimeout,
+		importWorkers:   importWorkers,
 	}
 
 	var importErrors []error
@@ -177,6 +183,7 @@ type importerConfig struct {
 	objectPreparer  ObjectPreparer
 	gvrResolver     *gvrResolver
 	crdWaitTimeout  time.Duration
+	importWorkers   int
 }
 
 type importerFn func(context.Context, *importerConfig) error
