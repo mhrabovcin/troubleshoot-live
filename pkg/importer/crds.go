@@ -136,7 +136,7 @@ func importCRDs(
 	var crdsMu sync.Mutex
 
 	// We use a custom worker pool to only track successfully imported CRDs
-	wp := newWorkerPool(ctx, defaultImportWorkers, func(innerCtx context.Context, task importTask) error {
+	wp := newWorkerPool(ctx, cfg.importWorkers, func(innerCtx context.Context, task importTask) error {
 		err := importObjectWithRetry(innerCtx, cfg.dynamicClient, task.gvr, task.object, task.includeStatus, cfg.objectPreparer)
 		if err != nil {
 			cfg.out.Warnf(

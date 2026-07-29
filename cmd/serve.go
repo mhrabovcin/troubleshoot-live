@@ -29,6 +29,7 @@ type serveOptions struct {
 	envtestArch           string
 	serviceClusterIPRange string
 	serviceNodePortRange  string
+	importWorkers         int
 }
 
 const internalProxyHTTPPrefix = "/bundles/default"
@@ -46,6 +47,12 @@ func NewServeCommand(out output.Output) *cobra.Command {
 		Use:   "serve SUPPORT_BUNDLE_PATH",
 		Short: "Starts a local envtest based Kubernetes API server with bundle resources",
 		Args:  cobra.ExactArgs(1),
+		PreRunE: func(_ *cobra.Command, _ []string) error {
+			if options.importWorkers < 1 {
+				return fmt.Errorf("--import-workers must be a positive integer")
+			}
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runServe(args[0], options, out)
 		},
@@ -77,6 +84,11 @@ func NewServeCommand(out output.Output) *cobra.Command {
 		"override k8s api server service node port range",
 	)
 
+	cmd.Flags().IntVar(
+		&options.importWorkers, "import-workers", importer.DefaultImportWorkers,
+		"number of concurrent importer workers",
+	)
+
 	return cmd
 }
 
@@ -106,7 +118,7 @@ func runServe(bundlePath string, o *serveOptions, out output.Output) error {
 	}()
 
 	out.StartOperation("Importing bundle resources")
-	err = importer.ImportBundle(ctx, supportBundle, testEnv.Config, out)
+	err = importer.ImportBundle(ctx, supportBundle, testEnv.Config, out, o.importWorkers)
 	out.EndOperation(err == nil)
 	if err != nil {
 		out.Error(err, "failed to import support bundle resources to API server")
