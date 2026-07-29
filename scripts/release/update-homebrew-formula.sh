@@ -75,7 +75,6 @@ cat >"${formula_path}" <<FORMULA
 class TroubleshootLive < Formula
   desc "Expose support bundle resources via a local Kubernetes API server"
   homepage "https://github.com/${SOURCE_REPOSITORY}"
-  version "${version}"
   license "Apache-2.0"
 
   on_macos do
