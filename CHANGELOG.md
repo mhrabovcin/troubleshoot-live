@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.0](https://github.com/mhrabovcin/troubleshoot-live/compare/v0.2.1...v0.3.0) (2026-07-29)
+
+
+### Features
+
+* add configurable --import-workers flag ([#188](https://github.com/mhrabovcin/troubleshoot-live/issues/188)) ([677e6c9](https://github.com/mhrabovcin/troubleshoot-live/commit/677e6c9cdf1209c874de40605f7cfad54409d53f))
+
+
+### Bug Fixes
+
+* remove version from homebrew formula ([#192](https://github.com/mhrabovcin/troubleshoot-live/issues/192)) ([fee9303](https://github.com/mhrabovcin/troubleshoot-live/commit/fee930388554a0b137560b548064fd6043dec661))
+
 ## [0.2.1](https://github.com/mhrabovcin/troubleshoot-live/compare/v0.2.0...v0.2.1) (2026-06-18)
 
 
