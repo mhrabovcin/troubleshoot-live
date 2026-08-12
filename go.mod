@@ -7,7 +7,7 @@ require (
 	github.com/go-logr/logr v1.4.4
 	github.com/gorilla/handlers v1.5.2
 	github.com/gorilla/mux v1.8.1
-	github.com/mesosphere/dkp-cli-runtime/core v0.7.3
+	github.com/mesosphere/dkp-cli-runtime/core v0.7.4
 	github.com/mholt/archives v0.1.5
 	github.com/spf13/afero v1.15.0
 	github.com/spf13/cobra v1.10.2
